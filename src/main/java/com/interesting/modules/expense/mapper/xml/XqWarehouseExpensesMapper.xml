@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.expense.mapper.XqWarehouseExpensesMapper">
+
+    <select id="getWarehouseList" resultType="com.interesting.modules.expense.dto.WarehouseExpensesVO">
+        SELECT
+        we.`id`,
+        we.`warehouse_id`,
+        w.`name` AS warehouseName,
+        we.`order_num`,
+        we.`product_name`,
+        we.`invoice_num`,
+        we.`expense`,
+        we.`invoice_date`,
+        we.`remark`,
+        we.`iz_settle`,
+        we.`payment_amount`,
+        we.`remark2`,
+        we.`audit_amount`,
+        we.`audit_date`,
+        we.`due_date`,
+        we.`payment_date`,
+       we.apply_for_date,
+        DATE(we.create_time) AS createTime
+
+
+        FROM
+        `xq_warehouse_expenses` AS we
+        LEFT JOIN xq_warehouse w ON w.`id` = we.`warehouse_id`
+        WHERE we.iz_delete = 0
+        <if test="dto != null and dto.warehouseName != null and '' != dto.warehouseName">
+            AND
+            <foreach collection="dto.warehouseNames" item="warehouseName" separator=" or " open="(" close=")">
+                w.`name` LIKE concat('%',#{warehouseName},'%')
+            </foreach>
+        </if>
+        <if test="dto != null and dto.orderNum != null and '' != dto.orderNum">
+            AND we.`order_num` LIKE concat('%',#{dto.orderNum},'%')
+        </if>
+
+        <if test="dto != null and dto.productName != null and '' != dto.productName">
+            AND we.`product_name` LIKE concat('%',#{dto.productName},'%')
+        </if>
+
+        <if test="dto != null and dto.invoiceNum != null and '' != dto.invoiceNum">
+            AND we.`invoice_num` LIKE concat('%',#{dto.invoiceNum},'%')
+        </if>
+
+        <if test="dto != null and dto.remark != null and '' != dto.remark">
+            AND we.`remark` LIKE concat('%',#{dto.remark},'%')
+        </if>
+
+        <if test="dto != null and dto.izSettle != null">
+            AND we.`iz_settle` = #{dto.izSettle}
+        </if>
+
+        <if test="dto != null and dto.invoiceDateStart != null and '' != dto.invoiceDateStart and dto.invoiceDateEnd != null and '' != dto.invoiceDateEnd">
+            AND we.`invoice_date` between #{dto.invoiceDateStart} and #{dto.invoiceDateEnd}
+        </if>
+        <if test="dto != null and dto.applyForDateStart != null and '' != dto.applyForDateStart and dto.applyForDateEnd != null and '' != dto.applyForDateEnd">
+            AND we.apply_for_date between #{dto.applyForDateStart} and #{dto.applyForDateEnd}
+        </if>
+
+        <if test="dto != null and dto.createTimeStart != null and '' != dto.createTimeStart and dto.createTimeEnd != null and '' != dto.createTimeEnd">
+            AND DATE(we.create_time) between #{dto.createTimeStart} and #{dto.createTimeEnd}
+        </if>
+
+        <if test="dto != null and dto.dueDateStart != null and '' != dto.dueDateStart and dto.dueDateEnd != null and '' != dto.dueDateEnd">
+            AND we.`due_date` between #{dto.dueDateStart} and #{dto.dueDateEnd}
+        </if>
+
+        <if test="dto != null and dto.paymentDateStart != null and '' != dto.paymentDateStart and dto.paymentDateEnd != null and '' != dto.paymentDateEnd">
+            AND we.`payment_date` between #{dto.paymentDateStart} and #{dto.paymentDateEnd}
+        </if>
+
+        ORDER BY
+
+        <if test="dto!= null and  dto.column != null and '' != dto.column">
+            we.${dto.column} ${dto.order},
+        </if>
+
+        we.create_time DESC,we.`order_num` desc,we.`product_name` desc, we.`invoice_num` desc
+
+
+    </select>
+
+    <select id="getWarehouseTotalAmount" resultType="com.interesting.modules.expense.vo.WarehouseTotalAmountVO">
+        SELECT
+            SUM(IFNULL(we.`expense`,0)) expenseTotal,
+            SUM(IFNULL(we.`audit_amount`,0)) auditAmountTotal ,
+            SUM(IFNULL(we.`payment_amount`,0)) paymentAmountTotal
+        FROM
+        `xq_warehouse_expenses` AS we
+        LEFT JOIN xq_warehouse w ON w.`id` = we.`warehouse_id`
+        WHERE we.iz_delete = 0
+        <if test="dto != null and dto.warehouseName != null and '' != dto.warehouseName">
+            AND
+            <foreach collection="dto.warehouseNames" item="warehouseName" separator=" or " open="(" close=")">
+                w.`name` LIKE concat('%',#{warehouseName},'%')
+            </foreach>
+        </if>
+        <if test="dto != null and dto.orderNum != null and '' != dto.orderNum">
+            AND we.`order_num` LIKE concat('%',#{dto.orderNum},'%')
+        </if>
+
+        <if test="dto != null and dto.productName != null and '' != dto.productName">
+            AND we.`product_name` LIKE concat('%',#{dto.productName},'%')
+        </if>
+
+        <if test="dto != null and dto.invoiceNum != null and '' != dto.invoiceNum">
+            AND we.`invoice_num` LIKE concat('%',#{dto.invoiceNum},'%')
+        </if>
+        <if test="dto != null and dto.izSettle != null">
+            AND we.`iz_settle` = #{dto.izSettle}
+        </if>
+        <if test="dto != null and dto.remark != null and '' != dto.remark">
+            AND we.`remark` LIKE concat('%',#{dto.remark},'%')
+        </if>
+
+        <if test="dto != null and dto.invoiceDateStart != null and '' != dto.invoiceDateStart and dto.invoiceDateEnd != null and '' != dto.invoiceDateEnd">
+            AND we.`invoice_date` between #{dto.invoiceDateStart} and #{dto.invoiceDateEnd}
+        </if>
+
+        <if test="dto != null and dto.dueDateStart != null and '' != dto.dueDateStart and dto.dueDateEnd != null and '' != dto.dueDateEnd">
+            AND we.`due_date` between #{dto.dueDateStart} and #{dto.dueDateEnd}
+        </if>
+
+        <if test="dto != null and dto.paymentDateStart != null and '' != dto.paymentDateStart and dto.paymentDateEnd != null and '' != dto.paymentDateEnd">
+            AND we.`payment_date` between #{dto.paymentDateStart} and #{dto.paymentDateEnd}
+        </if>
+
+        <if test="dto != null and dto.applyForDateStart != null and '' != dto.applyForDateStart and dto.applyForDateEnd != null and '' != dto.applyForDateEnd">
+            AND we.apply_for_date between #{dto.applyForDateStart} and #{dto.applyForDateEnd}
+        </if>
+
+        <if test="dto != null and dto.createTimeStart != null and '' != dto.createTimeStart and dto.createTimeEnd != null and '' != dto.createTimeEnd">
+            AND DATE(we.create_time) between #{dto.createTimeStart} and #{dto.createTimeEnd}
+        </if>
+
+
+    </select>
+
+</mapper>

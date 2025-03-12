@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasInventoryCheckDetailMapper">
+
+    <select id="getInventoryCheckDetListById"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryCheckDetailRecordVO">
+        SELECT oicd.id,
+               oicd.source_id,
+               oicd.warehouse_id,
+               oicd.product_id,
+               prd.product_name,
+               oicd.current_inventory,
+               oicd.real_inventory,
+               oicd.check_inventory,
+               oicd.warehouse_lot,
+               oicd.source_rep_num,
+               prd.packaging,
+               prd.packaging_unit,
+               prd.product_specs,
+               un.name AS packagingUnitTxt,
+               oicd.unit_price
+
+
+        FROM xq_overseas_inventory_check_detail oicd
+         LEFT JOIN xq_product_info prd ON prd.id = oicd.product_id AND prd.iz_delete = 0
+         LEFT JOIN xq_unit un ON un.id = prd.packaging_unit AND un.iz_delete = 0
+
+        WHERE oicd.iz_delete = 0
+          AND oicd.source_id = #{id}
+    </select>
+</mapper>

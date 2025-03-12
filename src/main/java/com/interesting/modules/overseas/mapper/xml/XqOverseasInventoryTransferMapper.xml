@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasTransferMapper">
+
+    <select id="pageInventoryTransfer"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryTransferPageVO">
+        SELECT iotc.id,
+        GROUP_CONCAT( DISTINCT concat(prd.product_name,'(',prd.packaging,' ',case prd.packaging_unit when 1 then 'kg'
+        when 2 then 'lbs' end,')') SEPARATOR ' | ' ) AS productName,
+        su.realname AS transUserName,
+        wh.name AS warehouseName,
+        GROUP_CONCAT(DISTINCT wh1.name SEPARATOR ' | ') as warehouseName1,
+        iotc.transfer_time as transfer_time,
+        GROUP_CONCAT(DISTINCT iotcd.warehouse_lot SEPARATOR ' | ') as warehouseLot,
+        iotc.audit_status
+
+        FROM xq_overseas_transfer iotc
+        LEFT JOIN xq_overseas_transfer_detail iotcd ON iotc.id = iotcd.source_id
+        LEFT JOIN xq_product_info prd ON prd.id = iotcd.product_id
+        LEFT JOIN xq_warehouse wh ON wh.id = iotc.warehouse_id
+        LEFT JOIN xq_warehouse wh1 ON wh1.id = iotcd.transfer_warehouse_id
+        LEFT JOIN sys_user su ON su.id = iotc.transfer_user_id
+
+        WHERE iotc.iz_delete = 0
+        <if test="dto.transferTimeStart != null and dto.transferTimeStart != ''">
+            AND iotc.transfer_time &gt;= #{dto.transferTimeStart}
+        </if>
+        <if test="dto.transferTimeEnd != null and dto.transferTimeEnd != ''">
+            AND iotc.transfer_time &lt;= #{dto.transferTimeEnd}
+        </if>
+        <if test="dto.transferUserId != null and dto.transferUserId != ''">
+            AND iotc.transfer_user_id = #{dto.transferUserId}
+        </if>
+
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND iotcd.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+
+        <if test="dto.sourceWarehouseId != null and dto.sourceWarehouseId != ''">
+            AND iotc.warehouse_id = #{dto.sourceWarehouseId}
+        </if>
+
+        <if test="dto.transferWarehouseUserId != null and dto.transferWarehouseUserId != ''">
+            AND iotcd.transfer_warehouse_id = #{dto.transferWarehouseUserId}
+        </if>
+
+
+        GROUP BY iotc.id
+
+        ORDER BY iotc.transfer_time DESC
+    </select>
+</mapper>

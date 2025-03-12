@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.freightcompany.mapper.XqFreightCompanyMapper">
+
+
+    <select id="queryByPage" resultType="com.interesting.modules.freightcompany.vo.ListXqFreightCompanyVO">
+        select xfc.id,
+               xfc.company_name,
+               xfc.contact_name,
+               xfc.contact_phone,
+               xfc.create_time,
+               xfc.update_time
+        from xq_freight_company xfc
+        where xfc.iz_delete = 0
+        <if test="dto.companyName != null and dto.companyName != ''">
+            and xfc.company_name like concat('%',#{dto.companyName},'%')
+        </if>
+
+        order by create_time desc
+
+    </select>
+</mapper>
+

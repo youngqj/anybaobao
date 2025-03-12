@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.product.mapper.XqProductInfoMapper">
+
+    <select id="queryXqProductInfoVOPage" resultType="com.interesting.modules.product.vo.XqProductInfoVO">
+        SELECT prd.id,
+               prd.product_name,
+               prd.product_name_en,
+               prd.hs_code_domestic,
+               prd.hs_code_foreign,
+        prd.product_specs,
+        prd.product_grade,
+               prd.foreign_tariff,
+               prd.packaging,
+               prd.packaging_unit,
+               ut.name AS packagingUnitTxt,
+               prd.create_by,
+        prd.create_time,
+        xc.id as product_category,
+        xc.category as product_category_name
+        FROM xq_product_info prd
+        <!-- 单位表 -->
+        LEFT JOIN xq_unit ut ON ut.id = prd.packaging_unit AND ut.iz_delete = 0
+        left join xq_product_category xc on xc.id=prd.product_category and xc.iz_delete=0
+        WHERE prd.iz_delete = 0
+        <if test="dto != null">
+            <if test="dto.productName != null and '' != dto.productName">
+                AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+            <if test="dto.hsCodeDomestic != null and '' != dto.hsCodeDomestic">
+                AND prd.hs_code_domestic LIKE CONCAT('%', #{dto.hsCodeDomestic}, '%')
+            </if>
+            <if test="dto.hsCodeForeign != null and '' != dto.hsCodeForeign">
+                AND prd.hs_code_foreign LIKE CONCAT('%', #{dto.hsCodeForeign}, '%')
+            </if>
+            <if test="dto.productSpecs != null and '' != dto.productSpecs">
+                AND prd.product_specs LIKE CONCAT('%', #{dto.productSpecs}, '%')
+            </if>
+            <if test="dto.productCategory != null and '' != dto.productCategory">
+                AND prd.product_category =#{dto.productCategory}
+            </if>
+            <if test="dto.packagingUnit != null and '' != dto.packagingUnit">
+                AND prd.packaging_unit = #{dto.packagingUnit}
+            </if>
+            <if test="dto.packaging != null and '' != dto.packaging">
+                AND prd.packaging LIKE CONCAT('%', #{dto.packaging}, '%')
+            </if>
+
+        </if>
+
+
+        ORDER BY prd.create_time DESC
+    </select>
+</mapper>

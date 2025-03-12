@@ -1,0 +1,495 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqInventoryOverseasMapper">
+
+    <delete id="physicalRemoveBySourceIds">
+        DELETE FROM xq_inventory_overseas WHERE source_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+    <select id="pageOverSeasInventory"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryPageVO">
+        SELECT iov.warehouse_id,
+               iov.warehouse_lot,
+               wh.name AS warehouseName,
+               iov.item_id AS productId,
+        concat(prd.product_name,'(',prd.packaging,' ',case prd.packaging_unit when 1 then 'kg' when 2 then 'lbs' end,'
+        ',IFNULL(prd.product_specs,''),' ',ifNULL(prd.product_grade,''),')') AS productName,
+               prd.product_name_en AS productNameEn,
+               SUM(iov.num) AS inventoryNum
+
+        FROM xq_inventory_overseas iov
+         LEFT JOIN xq_warehouse wh ON wh.id = iov.warehouse_id AND wh.iz_delete = 0
+         LEFT JOIN xq_product_info prd ON prd.id = iov.item_id AND prd.iz_delete = 0
+        WHERE iov.iz_delete = 0
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND iov.warehouse_id = #{dto.warehouseId}
+        </if>
+        <if test="dto.productId != null and dto.productId != ''">
+            AND iov.item_id = #{dto.productId}
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+            AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND iov.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+
+        GROUP BY iov.warehouse_id, iov.item_id
+        -- HAVING inventoryNum > 0
+        ORDER BY inventoryNum desc,iov.warehouse_id, iov.item_id
+    </select>
+    <select id="getInventoryNum" resultType="java.lang.Integer">
+        SELECT
+            IFNULL(SUM(iov.num), 0)
+        FROM xq_inventory_overseas iov
+        WHERE iov.iz_delete = 0
+          AND iov.item_id = #{productId}
+        <if test="warehouseId != null and warehouseId != ''">
+            AND iov.warehouse_id = #{warehouseId}
+        </if>
+        <if test="warehouseLot != null and warehouseLot != ''">
+            AND iov.warehouse_lot = #{warehouseLot}
+        </if>
+    </select>
+    <select id="pageBatchInventory"
+            resultType="com.interesting.modules.overseas.vo.BatchInventoryPageVO">
+        SELECT iov.warehouse_lot,
+        iov.item_id AS productId,
+               prd.product_name productName,
+               prd.product_name_en,
+               IFNULL(SUM(iov.num), 0) AS inventoryNum,
+        COALESCE(oeh.order_num, oxd.source_rep_num, oicd.source_rep_num,xotd.source_rep_num) AS sourceRepNum,
+               iov.warehouse_id,
+        wh.name AS warehouseName,
+        prd.product_specs,
+        prd.packaging,
+        prd.packaging_unit,
+        un.name AS packagingUnitTxt
+
+
+
+        FROM xq_inventory_overseas iov
+         LEFT JOIN xq_product_info prd ON prd.id = iov.item_id AND prd.iz_delete = 0
+        LEFT JOIN xq_unit un ON un.id = prd.packaging_unit AND un.iz_delete = 0
+         LEFT JOIN xq_overseas_enter_detail oed ON oed.id = iov.source_id AND iov.source_type = 'cgrk' AND
+        oed.iz_delete = 0
+         LEFT JOIN xq_overseas_enter_head oeh ON oeh.id = oed.source_id AND oeh.iz_delete = 0
+         LEFT JOIN xq_overseas_exit_detail oxd ON oxd.id = iov.source_id AND iov.source_type = 'xsck' AND
+        oxd.iz_delete = 0
+         LEFT JOIN xq_overseas_inventory_check_detail oicd ON oicd.id = iov.source_id AND oicd.iz_delete = 0
+        AND iov.source_type = 'pdlr'
+        LEFT JOIN xq_overseas_transfer_detail xotd ON xotd.id = iov.source_id
+        AND xotd.iz_delete = 0
+        AND iov.source_type = 'dblr'
+
+        LEFT JOIN xq_warehouse wh ON wh.id = iov.warehouse_id AND wh.iz_delete = 0
+
+        WHERE iov.iz_delete = 0
+        <if test="dto.productId != null and dto.productId != ''">
+          AND iov.item_id = #{dto.productId}
+        </if>
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+          AND iov.warehouse_id = #{dto.warehouseId}
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+          AND iov.warehouse_lot = #{dto.warehouseLot}
+        </if>
+       <if test="dto.sourceRepNum != null and dto.sourceRepNum != ''">
+           AND COALESCE(oeh.order_num, oxd.source_rep_num, oicd.source_rep_num,xotd.source_rep_num)  =  #{dto.sourceRepNum}
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+          AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        <if test="dto.productNameEn != null and dto.productNameEn != ''">
+          AND prd.product_name_en LIKE CONCAT('%', #{dto.productNameEn}, '%')
+        </if>
+
+        GROUP BY iov.warehouse_id, iov.warehouse_lot, iov.item_id, sourceRepNum
+        HAVING inventoryNum > 0
+    </select>
+    <select id="pageInventoryDetails"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryDetailPageVO">
+        SELECT iov.id,
+               iov.source_type,
+               ftp.item_text AS sourceTypeTxt,
+               iov.source_id,
+               iov.direction,
+               iov.num,
+               iov.item_id AS productId,
+               prd.product_name AS productName,
+               prd.product_name_en AS productNameEn,
+               iov.warehouse_id,
+               wh.name AS warehouseName,
+               iov.warehouse_lot,
+                case
+                when iov.direction = 1 then oedh.`receipt_date`
+                else oed2.bol_time
+                end AS relativeTime,
+        COALESCE(oedh.warehouse_enter_no, oedh2.warehouse_exit_no, oic.rep_num,xot.rep_num,xot1.rep_num) AS receiptNum,
+        COALESCE(oedh.order_num, oed2.source_rep_num, oicd.source_rep_num,xtd.source_rep_num,xtd1.source_rep_num) AS
+        sourceRepNum,
+        if(iov.source_type= 'cgrk',oedh.remark,oedh2.remark) as remark
+
+
+        FROM xq_inventory_overseas iov
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = iov.source_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'hw_source_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = iov.warehouse_id AND wh.iz_delete = 0
+        LEFT JOIN xq_product_info prd ON prd.id = iov.item_id AND prd.iz_delete = 0
+        LEFT JOIN xq_overseas_enter_detail oed ON oed.id = iov.source_id AND oed.iz_delete = 0 AND iov.source_type
+        = 'cgrk'
+        LEFT JOIN xq_overseas_enter_head oedh ON oedh.id = oed.source_id AND oedh.iz_delete = 0
+        LEFT JOIN xq_overseas_exit_detail oed2 ON oed2.id = iov.source_id AND oed2.iz_delete = 0 AND iov.source_type
+        = 'xsck'
+        LEFT JOIN xq_overseas_exit_head oedh2 ON oedh2.id = oed2.source_id AND oedh2.iz_delete = 0
+        LEFT JOIN xq_overseas_inventory_check_detail oicd ON oicd.id = iov.source_id AND oicd.iz_delete = 0 AND
+        iov.source_type = 'pdlr'
+        LEFT JOIN xq_overseas_inventory_check oic ON oic.id = oicd.source_id AND oic.iz_delete = 0
+
+        LEFT JOIN xq_overseas_transfer_detail xtd ON xtd.id = iov.source_id AND xtd.iz_delete = 0 AND
+        iov.source_type = 'dblr'
+        LEFT JOIN xq_overseas_transfer_detail xtd1 ON xtd1.id = iov.source_id AND xtd1.iz_delete = 0 AND
+        iov.source_type = 'dblc'
+
+        LEFT JOIN xq_overseas_transfer xot ON xot.id = xtd.source_id AND xot.iz_delete = 0
+        LEFT JOIN xq_overseas_transfer xot1 ON xot1.id = xtd1.source_id AND xot1.iz_delete = 0
+        WHERE iov.iz_delete = 0
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND iov.warehouse_id = #{dto.warehouseId}
+        </if>
+        <if test="dto.productId != null and dto.productId != ''">
+            AND iov.item_id = #{dto.productId}
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND iov.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+            AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        <if test="dto.productNameEn != null and dto.productNameEn != ''">
+            AND prd.product_name_en LIKE CONCAT('%', #{dto.productNameEn}, '%')
+        </if>
+        <if test="dto.sourceRepNum != null and dto.sourceRepNum != ''">
+            AND COALESCE(oedh.order_num, oed2.source_rep_num, oicd.source_rep_num) LIKE CONCAT('%', #{dto.sourceRepNum}, '%')
+        </if>
+        GROUP BY source_id, item_id, warehouse_id,warehouse_lot
+        ORDER BY relativeTime DESC
+    </select>
+    <select id="getInventoryMapList" resultType="java.util.Map">
+        SELECT
+            SUM(iov.num) AS num,
+            iov.item_id,
+            iov.warehouse_id
+
+        FROM xq_inventory_overseas iov
+
+        WHERE iov.iz_delete = 0
+        AND iov.warehouse_id = #{warehouseId}
+        AND iov.item_id IN
+        <foreach item="id" collection="productIds" separator="," open="(" close=")" index="">
+            #{id}
+        </foreach>
+
+        GROUP BY iov.warehouse_id, iov.item_id
+    </select>
+
+    <select id="getHuoZhiDetail" resultType="com.interesting.modules.overseas.vo.HuoZhiDetailVO">
+        SELECT * FROM (
+        SELECT
+        io.warehouse_id,
+        io.warehouse_lot,
+        io.item_id,
+        xo.order_num,
+        w.`name` AS warehouseName,
+        xpi.`product_name`,
+        xpi.`product_name_en`,
+        (SUM(io.num) + COALESCE(i.num, 0)) AS inventoryNum,
+        ROUND(xod.price_per_lb*xod.weight_per_box,3) AS price,
+        ROUND((SUM(io.num) + COALESCE(i.num, 0)) * (ROUND(xod.price_per_lb*xod.weight_per_box,3)),2) AS totalPrice
+
+        FROM
+        xq_inventory_overseas io
+        LEFT JOIN xq_overseas_enter_detail oed ON oed.id = io.source_id
+        LEFT JOIN xq_order_detail xod ON oed.order_detail_id = xod.id
+        LEFT JOIN xq_order xo ON xo.id = xod.order_id
+        LEFT JOIN xq_warehouse w ON io.`warehouse_id` = w.`id`
+        LEFT JOIN xq_product_info xpi ON xpi.`id` = io.`item_id`
+        LEFT JOIN (
+        SELECT
+        i.warehouse_id,
+        i.item_id,
+        i.warehouse_lot,
+        oed.source_rep_num,
+        SUM(i.num) AS num
+        FROM
+        xq_inventory_overseas i
+        LEFT JOIN xq_overseas_exit_detail oed ON oed.id = i.source_id
+        WHERE
+        i.iz_delete = 0
+        AND i.direction = 2
+        GROUP BY
+        i.warehouse_id,
+        i.item_id,
+        i.warehouse_lot,
+        oed.source_rep_num
+        ) AS i ON i.warehouse_id = io.warehouse_id
+        AND i.warehouse_lot = io.warehouse_lot
+        AND i.item_id = io.item_id
+        AND i.source_rep_num = xo.order_num
+        WHERE
+        io.iz_delete = 0
+        AND io.direction = 1
+        AND xo.order_num IS NOT NULL
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND io.warehouse_id = #{dto.warehouseId}
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND io.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND w.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.productId != null and dto.productId != ''">
+            AND  io.`item_id` = #{dto.productId}
+        </if>
+        <if test="dto.orderNum != null and dto.orderNum != ''">
+            AND xo.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+        </if>
+            GROUP BY
+            io.warehouse_id,
+            io.item_id,
+            io.warehouse_lot,
+            xo.order_num,
+            xod.price_per_lb
+            ORDER BY
+            io.warehouse_id,
+            io.item_id,
+            io.warehouse_lot,
+            xo.order_num
+        )t  WHERE t.inventoryNum > 0
+    </select>
+
+    <select id="getHuoZhiByWarehouse" resultType="com.interesting.modules.overseas.vo.HuoZhiWarehouseVO">
+        SELECT * FROM (
+            SELECT
+            t.`warehouse_id` AS id,
+            t.`warehouseName` AS warehouseName,
+            t.productName,
+            t.productId,
+            t.`product_name_en`,
+            SUM(t.inventoryNum) AS inventoryNum,
+            SUM(t.totalPrice) AS totalPrice
+
+            FROM (
+            SELECT
+            io.warehouse_id,
+            io.warehouse_lot,
+            io.item_id productId,
+            xo.order_num,
+            w.`name` AS warehouseName,
+        CONCAT(xpi.product_name,'(',xpi.packaging,' ',CASE xpi.packaging_unit WHEN 1 THEN 'kg' WHEN 2 THEN 'lbs' END,'
+        ',IFNULL(xpi.product_specs,''),' ',IFNULL(xpi.product_grade,''),')') AS productName,
+            xpi.`product_name_en`,
+            (SUM(io.num) + COALESCE(i.num, 0)) AS inventoryNum,
+            ROUND(xod.price_per_lb*xod.weight_per_box,3) AS price,
+            ROUND((SUM(io.num) + COALESCE(i.num, 0)) * (ROUND(xod.price_per_lb*xod.weight_per_box,3)),2) AS totalPrice
+
+            FROM
+            xq_inventory_overseas io
+            LEFT JOIN xq_overseas_enter_detail oed ON oed.id = io.source_id
+            LEFT JOIN xq_order_detail xod ON oed.order_detail_id = xod.id
+            LEFT JOIN xq_order xo ON xo.id = xod.order_id
+            LEFT JOIN xq_warehouse w ON io.`warehouse_id` = w.`id`
+            LEFT JOIN xq_product_info xpi ON xpi.`id` = io.`item_id`
+            LEFT JOIN (
+            SELECT
+            i.warehouse_id,
+            i.item_id,
+            i.warehouse_lot,
+            oed.source_rep_num,
+            SUM(i.num) AS num
+            FROM
+            xq_inventory_overseas i
+            LEFT JOIN xq_overseas_exit_detail oed ON oed.id = i.source_id
+            WHERE
+            i.iz_delete = 0
+            AND i.direction = 2
+            GROUP BY
+            i.warehouse_id,
+            i.item_id,
+            i.warehouse_lot,
+            oed.source_rep_num
+            ) AS i ON i.warehouse_id = io.warehouse_id
+            AND i.warehouse_lot = io.warehouse_lot
+            AND i.item_id = io.item_id
+            AND i.source_rep_num = xo.order_num
+            WHERE
+            io.iz_delete = 0
+            AND io.direction = 1
+            AND xo.order_num IS NOT NULL
+            <if test="dto.warehouseName != null and dto.warehouseName != ''">
+                AND w.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND xpi.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+            GROUP BY
+            io.warehouse_id,
+            io.item_id,
+            io.warehouse_lot,
+            xo.order_num,
+            xod.price_per_lb
+
+
+            ) AS  t
+        GROUP BY t.`warehouse_id`,t.productId
+        ORDER BY t.`warehouse_id`,t.productId
+
+        ) tt WHERE tt.inventoryNum > 0
+        order by inventoryNum desc
+
+    </select>
+
+
+
+
+    <select id="getTotalNum" resultType="com.interesting.modules.overseas.vo.TotalNumVO">
+        SELECT
+        SUM(iov.num) totalNum
+        FROM xq_inventory_overseas iov
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = iov.source_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'hw_source_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = iov.warehouse_id AND wh.iz_delete = 0
+        LEFT JOIN xq_product_info prd ON prd.id = iov.item_id AND prd.iz_delete = 0
+        LEFT JOIN xq_overseas_enter_detail oed ON oed.id = iov.source_id AND oed.iz_delete = 0 AND iov.source_type
+        = 'cgrk'
+        LEFT JOIN xq_overseas_enter_head oedh ON oedh.id = oed.source_id AND oedh.iz_delete = 0
+        LEFT JOIN xq_overseas_exit_detail oed2 ON oed2.id = iov.source_id AND oed2.iz_delete = 0 AND iov.source_type
+        = 'xsck'
+        LEFT JOIN xq_overseas_exit_head oedh2 ON oedh2.id = oed2.source_id AND oedh2.iz_delete = 0
+        LEFT JOIN xq_overseas_inventory_check_detail oicd ON oicd.id = iov.source_id AND oicd.iz_delete = 0 AND
+        iov.source_type = 'pdlr'
+        LEFT JOIN xq_overseas_inventory_check oic ON oic.id = oicd.source_id AND oic.iz_delete = 0
+
+        LEFT JOIN xq_overseas_transfer_detail xtd ON xtd.id = iov.source_id AND xtd.iz_delete = 0 AND
+        iov.source_type = 'dblr'
+        LEFT JOIN xq_overseas_transfer_detail xtd1 ON xtd1.id = iov.source_id AND xtd1.iz_delete = 0 AND
+        iov.source_type = 'dblc'
+
+        LEFT JOIN xq_overseas_transfer xot ON xot.id = xtd.source_id AND xot.iz_delete = 0
+        LEFT JOIN xq_overseas_transfer xot1 ON xot1.id = xtd1.source_id AND xot1.iz_delete = 0
+        WHERE iov.iz_delete = 0
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND iov.warehouse_id = #{dto.warehouseId}
+        </if>
+        <if test="dto.productId != null and dto.productId != ''">
+            AND iov.item_id = #{dto.productId}
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND iov.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+            AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        <if test="dto.productNameEn != null and dto.productNameEn != ''">
+            AND prd.product_name_en LIKE CONCAT('%', #{dto.productNameEn}, '%')
+        </if>
+        <if test="dto.sourceRepNum != null and dto.sourceRepNum != ''">
+            AND COALESCE(oedh.order_num, oed2.source_rep_num, oicd.source_rep_num) LIKE CONCAT('%', #{dto.sourceRepNum}, '%')
+        </if>
+
+    </select>
+    <select id="getTotalPrice" resultType="com.interesting.modules.overseas.vo.HuoZhiWarehouseVO">
+        SELECT ifnull(sum(tt.totalPrice), 0) totalPrice FROM (
+        SELECT
+        t.`warehouse_id` AS id,
+        t.`warehouseName` AS warehouseName,
+        t.productName,
+        t.productId,
+        t.`product_name_en`,
+        SUM(t.inventoryNum) AS inventoryNum,
+        SUM(t.totalPrice) AS totalPrice
+
+        FROM (
+        SELECT
+        io.warehouse_id,
+        io.warehouse_lot,
+        io.item_id productId,
+        xo.order_num,
+        w.`name` AS warehouseName,
+        CONCAT(xpi.product_name,'(',xpi.packaging,' ',CASE xpi.packaging_unit WHEN 1 THEN 'kg' WHEN 2 THEN 'lbs' END,'
+        ',IFNULL(xpi.product_specs,''),' ',IFNULL(xpi.product_grade,''),')') AS productName,
+        xpi.`product_name_en`,
+        (SUM(io.num) + COALESCE(i.num, 0)) AS inventoryNum,
+        ROUND(xod.price_per_lb*xod.weight_per_box,3) AS price,
+        ROUND((SUM(io.num) + COALESCE(i.num, 0)) * (ROUND(xod.price_per_lb*xod.weight_per_box,3)),2) AS totalPrice
+
+        FROM
+        xq_inventory_overseas io
+        LEFT JOIN xq_overseas_enter_detail oed ON oed.id = io.source_id
+        LEFT JOIN xq_order_detail xod ON oed.order_detail_id = xod.id
+        LEFT JOIN xq_order xo ON xo.id = xod.order_id
+        LEFT JOIN xq_warehouse w ON io.`warehouse_id` = w.`id`
+        LEFT JOIN xq_product_info xpi ON xpi.`id` = io.`item_id`
+        LEFT JOIN (
+        SELECT
+        i.warehouse_id,
+        i.item_id,
+        i.warehouse_lot,
+        oed.source_rep_num,
+        SUM(i.num) AS num
+        FROM
+        xq_inventory_overseas i
+        LEFT JOIN xq_overseas_exit_detail oed ON oed.id = i.source_id
+        WHERE
+        i.iz_delete = 0
+        AND i.direction = 2
+        GROUP BY
+        i.warehouse_id,
+        i.item_id,
+        i.warehouse_lot,
+        oed.source_rep_num
+        ) AS i ON i.warehouse_id = io.warehouse_id
+        AND i.warehouse_lot = io.warehouse_lot
+        AND i.item_id = io.item_id
+        AND i.source_rep_num = xo.order_num
+        WHERE
+        io.iz_delete = 0
+        AND io.direction = 1
+        AND xo.order_num IS NOT NULL
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND w.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+            AND xpi.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        GROUP BY
+        io.warehouse_id,
+        io.item_id,
+        io.warehouse_lot,
+        xo.order_num,
+        xod.price_per_lb
+
+
+        ) AS  t
+        GROUP BY t.`warehouse_id`,t.productId
+        ORDER BY t.`warehouse_id`,t.productId
+
+        ) tt WHERE tt.inventoryNum > 0
+        order by inventoryNum desc
+    </select>
+</mapper>

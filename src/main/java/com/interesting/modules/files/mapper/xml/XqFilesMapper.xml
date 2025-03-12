@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.files.mapper.XqFilesMapper">
+
+
+    <select id="pageList" resultType="com.interesting.modules.files.vo.ListXqFileVO">
+        SELECT xq_files.id,
+               xq_files.order_id,
+               xq_files.module_type,
+               xq_files.file_url,
+               xq_files.file_name,
+               xq_files.file_type,
+               xq_files.file_size,
+               xq_files.create_by,
+               xq_files.create_time
+
+        FROM xq_files
+        WHERE xq_files.iz_delete = 0
+          AND xq_files.order_id = #{dto.orderId}
+          AND xq_files.module_type = #{dto.moduleType}
+
+    </select>
+    <select id="pageFileByNodeId" resultType="com.interesting.modules.files.vo.ListXqFileVO">
+
+        SELECT
+
+        fil.id,
+        fil.order_id,
+        fil.module_type,
+        fil.file_url,
+        fil.file_name,
+        fil.file_type,
+        sc.`name` AS category_name,
+        fil.file_size,
+        fil.file_uid,
+        fil.node_id,
+        su.realname AS createBy,
+        fil.create_time
+        FROM
+        xq_files fil
+        LEFT JOIN sys_user su ON su.username = fil.create_by
+        AND fil.iz_delete = 0
+        LEFT JOIN sys_category sc ON sc.id = fil.node_id
+        WHERE
+        fil.node_id IN (
+        SELECT
+        a.id
+        FROM
+        (
+        SELECT
+        id,
+        create_time,
+        pid,
+        IF
+        ( FIND_IN_SET( pid, @pid ) > 0, @pid := CONCAT( @pid, ',', id ), 0 ) AS subset,
+        IF
+        ( FIND_IN_SET( id, @pid ) > 0, @pid := CONCAT( @pid, ',', id ), 0 ) AS oneself
+        FROM
+        sys_category
+        ) a,
+        ( SELECT @pid := #{nodeId} b ) c
+        WHERE
+        a.subset != '0'
+        OR a.oneself != '0'
+        GROUP BY
+        a.id
+        order by create_time desc
+
+        )
+        AND fil.iz_delete = 0
+        <if test="username != null and username != ''">
+            AND fil.create_by = #{username}
+        </if>
+        <if test="fileName != null and fileName != ''">
+            AND fil.file_name LIKE CONCAT('%', #{fileName}, '%')
+        </if>
+        ORDER BY
+        fil.id desc,
+        fil.create_time desc
+    </select>
+</mapper>

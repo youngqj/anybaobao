@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.accmaterial.mapper.XqAccessoryCategoryMapper">
+
+    <select id="queryAccCategoryTree" resultType="com.interesting.business.system.model.TreeSelectModel">
+        select
+            name as "title",
+            id as "key",
+            id AS "value",
+        (case when has_child = '1' then 0 else 1 end) as isLeaf,
+        pid as parentId
+        from xq_accessory_category
+        where pid = #{pid}
+        AND xq_accessory_category.iz_delete = 0
+    </select>
+</mapper>

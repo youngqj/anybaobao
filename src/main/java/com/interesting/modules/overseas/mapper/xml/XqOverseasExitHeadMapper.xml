@@ -1,0 +1,520 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasExitHeadMapper">
+    <select id="pageExitStorage" resultType="com.interesting.modules.overseas.vo.ExitStoragePageVO">
+        SELECT oeh.id,
+        GROUP_CONCAT(DISTINCT oehd.customer_order_num SEPARATOR ' | ') as customerOrderNum,
+               oeh.receipt_date,
+               oeh.create_by,
+               oeh.create_time,
+        GROUP_CONCAT(DISTINCT concat(prd.product_name,'(',prd.packaging,' ',case prd.packaging_unit when 1 then 'kg'
+        when 2 then 'lbs' end,')') SEPARATOR ' | ' )AS productInfo,
+               oeh.audit_status
+
+        FROM xq_overseas_exit_head oeh
+        LEFT JOIN xq_overseas_exit_detail oehd ON oeh.id = oehd.source_id AND oehd.iz_delete = 0
+        LEFT JOIN xq_product_info prd ON prd.id = oehd.product_id AND prd.iz_delete = 0
+
+        WHERE oeh.iz_delete = 0
+        <if test="dto.customerOrderNum != null and dto.customerOrderNum != ''">
+            AND oehd.customer_order_num LIKE CONCAT('%', #{dto.customerOrderNum}, '%')
+        </if>
+        <if test="dto.orderNum != null and dto.orderNum != ''">
+            AND oeh.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+        </if>
+        <if test="dto.receiptDateBegin != null and dto.receiptDateBegin != ''">
+            AND oeh.receipt_date &gt;= #{dto.receiptDateBegin}
+        </if>
+        <if test="dto.receiptDateEnd != null and dto.receiptDateEnd != ''">
+            AND oeh.receipt_date &lt;= #{dto.receiptDateEnd}
+        </if>
+
+        GROUP BY oeh.id, oeh.create_time
+        ORDER BY oeh.create_time DESC
+    </select>
+
+    <!--    <select id="pageRelativeLot"-->
+    <!--            resultType="com.interesting.modules.overseas.vo.RelativeInventoryLotPageVO">-->
+    <!--        SELECT-->
+    <!--            ord.order_num,-->
+    <!--            oed.product_id,-->
+    <!--            prd.product_name,-->
+    <!--            IFNULL(SUM(oed.enter_num), 0) AS totalNum,-->
+    <!--            oed.warehouse_lot,-->
+    <!--            oed.warehouse_id,-->
+    <!--            wh.name AS warehouseName,-->
+    <!--            oed.packaging,-->
+    <!--            oed.packaging_unit,-->
+    <!--            un.name AS packagingUnitTxt,-->
+    <!--            oed.unit_price-->
+
+    <!--        FROM xq_overseas_enter_detail oed-->
+    <!--        LEFT JOIN xq_order_detail xod on oed.order_detail_id = xod.id-->
+    <!--        LEFT JOIN xq_order ord ON ord.id = xod.order_id AND ord.iz_delete = 0-->
+    <!--        LEFT JOIN xq_product_info prd ON prd.id = oed.product_id AND prd.iz_delete = 0-->
+    <!--        LEFT JOIN xq_warehouse wh ON wh.id = oed.warehouse_id AND wh.iz_delete = 0-->
+    <!--        LEFT JOIN xq_unit un ON un.id = xod.packaging_unit AND un.iz_delete = 0-->
+
+    <!--        WHERE oed.iz_delete = 0-->
+    <!--          AND oed.source_id IN (SELECT id FROM xq_overseas_enter_head xoed WHERE xoed.iz_delete = 0 AND-->
+    <!--        xoed.audit_status = '1')-->
+    <!--        <if test="dto.orderNum != null and dto.orderNum != ''">-->
+    <!--            AND ord.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')-->
+    <!--        </if>-->
+    <!--        <if test="dto.productName != null and dto.productName != ''">-->
+    <!--            AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')-->
+    <!--        </if>-->
+    <!--        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">-->
+    <!--            AND oed.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')-->
+    <!--        </if>-->
+    <!--        <if test="dto.warehouseName != null and dto.warehouseName != ''">-->
+    <!--            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')-->
+    <!--        </if>-->
+
+    <!--        GROUP BY ord.order_num, oed.product_id, oed.warehouse_id, oed.warehouse_lot-->
+
+    <!--        ORDER BY ord.order_num-->
+
+    <!--    </select>-->
+
+    <select id="pageRelativeLot"
+            resultType="com.interesting.modules.overseas.vo.RelativeInventoryLotPageVO">
+        select * from (
+        SELECT
+        xio.warehouse_lot,
+        xw.`name` AS warehouse_name,
+        xio.warehouse_id,
+        xio.item_id as product_id,
+        xpi.product_name AS product_name,
+        xpi.packaging_unit AS packaging_unit,
+        xu.`name` AS packagingUnitTxt,
+        xpi.packaging AS packaging,
+        sum( if(xio.direction = '1', xio.num, 0) ) AS totalNum,
+        ifnull(sum( xio.num ), 0) AS surplusNum,
+        sum( if(xio.direction = '2' and xio.source_type = 'xsck', xio.num, 0) ) AS yetNum,
+        COALESCE ( oeh.order_num, oxd.source_rep_num, oicd.source_rep_num,xotd.source_rep_num ) AS orderNum,
+        COALESCE ( oed.unit_price, oxd.unit_price, oicd.unit_price,xotd.unit_price ) AS unit_price
+
+        FROM
+        xq_inventory_overseas xio
+        LEFT JOIN xq_warehouse xw ON xio.warehouse_id = xw.id
+        LEFT JOIN xq_product_info xpi ON xpi.id = xio.item_id
+        LEFT JOIN xq_unit xu ON xu.id = xpi.packaging_unit
+        LEFT JOIN xq_overseas_enter_detail oed ON oed.id = xio.source_id
+        AND xio.source_type = 'cgrk'
+        AND oed.iz_delete = 0 and oed.source_id IN (SELECT id FROM xq_overseas_enter_head xoed WHERE xoed.iz_delete = 0
+        AND
+        xoed.audit_status = '1')
+        LEFT JOIN xq_overseas_enter_head oeh ON oeh.id = oed.source_id
+        AND oeh.iz_delete = 0
+        LEFT JOIN xq_overseas_exit_detail oxd ON oxd.id = xio.source_id
+        AND xio.source_type = 'xsck'
+        AND oxd.iz_delete = 0
+        LEFT JOIN xq_overseas_inventory_check_detail oicd ON oicd.id = xio.source_id
+        AND oicd.iz_delete = 0
+        AND xio.source_type = 'pdlr'
+        LEFT JOIN xq_overseas_transfer_detail xotd ON xotd.id = xio.source_id
+        AND xotd.iz_delete = 0
+        AND xio.source_type = 'dblr'
+
+        WHERE
+        xio.iz_delete = 0
+
+
+        GROUP BY
+        xio.warehouse_id,
+        xio.item_id,
+        xio.warehouse_lot,
+        COALESCE( oeh.order_num, oxd.source_rep_num, oicd.source_rep_num, xotd.source_rep_num)
+
+        HAVING
+        sum( xio.num ) >0
+        ) zzz
+
+        where 1=1
+        <if test="dto.orderNum != null and dto.orderNum != ''">
+            AND zzz.orderNum LIKE CONCAT('%', #{dto.orderNum}, '%')
+        </if>
+        <if test="dto.productName != null and dto.productName != ''">
+            AND zzz.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+        </if>
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND zzz.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND zzz.warehouse_name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+
+    </select>
+    <select id="pageExitStorageDetail"
+            resultType="com.interesting.modules.overseas.vo.ExitStorageDetailPageVO">
+        select * from (
+        with rt as (SELECT count(i.order_id),sum(i.remittance_amount +
+        i.service_charge+i.factoring_interest+i.factoring_money+i.quality+i.discount) as totalRemitAmount,
+        i.order_id,i.order_num,xo.order_Num as source_rep_num FROM xq_remittance_detail i LEFT JOIN xq_order xo on
+        xo.id=i.order_id
+        where i.iz_delete =0 and i.order_num !='' GROUP BY i.order_id,i.order_num
+        ORDER BY i.order_num desc)
+
+        SELECT oed.id,
+        oed.source_rep_num,
+        oed.customer_order_num,
+        oed.special_remark,
+        oed.bol,
+        oed.bol_time,
+        oed.pod_time,
+        oed.payment_expire_date,
+        oed.warehouse_id,
+        wh.name AS warehouseName,
+        oed.warehouse_lot,
+        oed.product_id,
+        prd.product_name_en as product_name,
+        oed.packaging,
+        oed.packaging_unit,
+        un.name AS packagingUnitTxt,
+        oed.exit_num,
+        oed.unit_price,
+        oed.exit_money,
+        oed.customer_id,
+        c.name AS customerName,
+        oed.invoice_num,
+        xoeh.warehouse_exit_no,
+        xoeh.receipt_date,
+        oed.credit_insurance_premium,
+        oed.exchange_rate,
+        oed.credit_insurance_premium_convert,
+        oed.insurance_effective_date,
+        (
+        SELECT IFNULL(SUM(xrd.factoring_interest),0) FROM xq_remittance_detail xrd WHERE iz_delete = 0 AND  xrd.order_id = rt.order_id AND xrd.order_num = oed.`customer_order_num`
+        ) factoringInterest,
+        case
+        when
+        rt.totalRemitAmount is not null and (
+        sum(oed2.exit_money)-ifnull(rt.totalRemitAmount,0) + (
+        -- 加额外费用
+        SELECT
+        IFNULL(SUM(oec.price),0)
+        FROM
+        xq_order_extra_cost oec
+        LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`
+
+        WHERE oec.iz_delete = 0
+        AND xo.order_num = oed.source_rep_num   AND oec.`customer_order_num` = oed.customer_order_num
+        )   - (
+        -- 订单扣除
+
+        SELECT
+        IFNULL(SUM(cms.amount),0) amount
+
+        FROM xq_order_commission cms
+        LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`
+
+        WHERE cms.iz_delete = 0
+
+        AND xo.order_num = oed.source_rep_num  AND cms.`customer_order_num` = oed.customer_order_num
+        AND cms.commission_type = 'ddkc'
+
+        ) &lt;= 0)
+        then 3
+        when
+        rt.totalRemitAmount is null or rt.totalRemitAmount = 0
+        then 1
+        else 2
+        end as remmitStatus
+        FROM xq_overseas_exit_detail oed
+        left join xq_overseas_exit_detail oed2 on oed2.customer_order_num = oed.customer_order_num
+        and oed2.source_rep_num = oed.source_rep_num
+        and oed2.iz_delete = 0
+        INNER JOIN xq_overseas_exit_head xoeh ON xoeh.id = oed.source_id AND xoeh.iz_delete = 0 AND
+        xoeh.audit_status = '1'
+        LEFT JOIN xq_warehouse wh ON wh.id = oed.warehouse_id
+        LEFT JOIN xq_product_info prd ON prd.id = oed.product_id
+        LEFT JOIN xq_unit un ON un.id = oed.packaging_unit
+        LEFT JOIN xq_customer c ON c.id = oed.customer_id
+        LEFT JOIN rt rt on TRIM(oed.customer_order_num) = TRIM(rt.order_num) and
+        TRIM(oed.source_rep_num)=TRIM(rt.source_rep_num)
+        where 1=1
+        and oed.iz_delete = 0
+        and oed.warehouse_lot != ""
+        and oed.warehouse_lot is not null
+        <if test="dto != null">
+
+            <if test="dto.bol != null and dto.bol != ''">
+                AND oed.bol LIKE CONCAT('%', Trim(#{dto.bol}), '%')
+            </if>
+            <if test="dto.insuranceEffectiveDateStart != null and '' != dto.insuranceEffectiveDateStart and dto.insuranceEffectiveDateEnd != null and '' != dto.insuranceEffectiveDateEnd">
+                AND oed.insurance_effective_date BETWEEN #{dto.insuranceEffectiveDateStart} AND #{dto.insuranceEffectiveDateEnd}
+            </if>
+            <if test="dto.bolTimeBegin != null and dto.bolTimeBegin != '' ">
+                AND oed.bol_time &gt;= #{dto.bolTimeBegin}
+            </if>
+            <if test="dto.bolTimeEnd != null and dto.bolTimeEnd != '' ">
+                AND oed.bol_time &lt;= #{dto.bolTimeEnd}
+            </if>
+            <if test="dto.customerName != null and dto.customerName != ''">
+                AND c.name LIKE CONCAT('%', #{dto.customerName}, '%')
+            </if>
+            <if test="dto.customerOrderNum != null and dto.customerOrderNum != ''">
+                AND oed.customer_order_num LIKE CONCAT('%', #{dto.customerOrderNum}, '%')
+            </if>
+            <if test="dto.sourceRepNum != null and dto.sourceRepNum != ''">
+                AND oed.source_rep_num LIKE CONCAT('%', #{dto.sourceRepNum}, '%')
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND prd.product_name_en LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+            <if test="dto.warehouseName != null and dto.warehouseName != ''">
+                AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+            </if>
+            <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+                AND oed.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+            </if>
+            <if test="dto.invoiceNum != null and dto.invoiceNum != ''">
+                AND oed.invoice_num LIKE CONCAT('%', #{dto.invoiceNum}, '%')
+            </if>
+        </if>
+        group by oed.id
+        ORDER BY xoeh.receipt_date DESC ) zzz
+        where 1=1
+        <if test="dto.remmitStatus != null and dto.remmitStatus != ''">
+            AND find_in_set(zzz.remmitStatus, #{dto.remmitStatus})
+        </if>
+
+        <if test="dto!= null and  dto.column != null and '' != dto.column">
+            ORDER BY   ${dto.column} ${dto.order}
+        </if>
+    </select>
+
+
+    <select id="exitStorageDetailList"
+            resultType="com.interesting.modules.overseas.dto.InstUptExitStorageDetailItemDTO">
+        SELECT oed.id,
+        oed.source_rep_num,
+        oed.customer_order_num,
+        oed.bol,
+        oed.bol_time,
+        oed.pod_time,
+        oed.payment_expire_date,
+        oed.warehouse_id,
+        wh.name AS warehouseName,
+        oed.warehouse_lot,
+        oed.product_id,
+        prd.product_name,
+        oed.packaging,
+        oed.packaging_unit,
+        un.name AS packagingUnitTxt,
+        oed.exit_num,
+        oed.unit_price,
+        oed.special_remark,
+        oed.exit_money,
+        oed.customer_id,
+        c.name AS customer,
+        oed.invoice_num,
+        xoeh.warehouse_exit_no,
+        xoeh.receipt_date,
+        oed.credit_insurance_premium,
+        oed.exchange_rate,
+        oed.credit_insurance_premium_convert,
+        oed.insurance_effective_date
+        FROM xq_overseas_exit_detail oed
+        INNER JOIN xq_overseas_exit_head xoeh ON xoeh.id = oed.source_id AND xoeh.iz_delete = 0 AND
+        xoeh.audit_status = '1'
+        LEFT JOIN xq_warehouse wh ON wh.id = oed.warehouse_id
+        LEFT JOIN xq_product_info prd ON prd.id = oed.product_id
+        LEFT JOIN xq_unit un ON un.id = oed.packaging_unit
+        LEFT JOIN xq_customer c ON c.id = oed.customer_id
+        LEFT JOIN xq_order xo ON xo.`order_num` = oed.`source_rep_num`
+
+        WHERE oed.iz_delete = 0
+
+        <if test="orderNum != null and orderNum != ''">
+            AND oed.source_rep_num = #{orderNum}
+        </if>
+
+
+        ORDER BY product_id,xoeh.receipt_date DESC
+    </select>
+
+
+    <select id="sumRemmitAmount"
+            resultType="com.interesting.modules.overseas.vo.SumRemmitAmountVO">
+        with rt2 as (SELECT count(i.order_id),sum(i.remittance_amount +
+        i.service_charge+i.factoring_interest+i.factoring_money+i.quality+i.discount) as totalRemitAmount,
+        i.order_id,i.order_num,xo.order_Num as source_rep_num, sum(i.outstanding_receivables) outstanding_receivables
+        FROM xq_remittance_detail i LEFT JOIN xq_order xo on
+        xo.id=i.order_id
+        where i.iz_delete =0 and i.order_num !='' GROUP BY i.order_id,i.order_num
+        ORDER BY i.order_num desc)
+
+        select
+
+        IFNULL(SUM(zzz.credit_insurance_premium),0.00) AS total_credit_insurance_premium,
+        IFNULL(SUM(zzz.exit_money),0.00) AS total_exit_money,
+        IFNULL(SUM(zzz.credit_insurance_premium_convert),0.00) AS total_credit_insurance_premium_convert,
+        IFNULL(SUM(zzz.factoringInterest),0) AS totalFactoringInterest,
+        IFNULL(SUM(rt2.outstanding_receivables),0) AS outstanding_receivables
+
+        from (
+        with rt as (SELECT count(i.order_id),sum(i.remittance_amount +
+        i.service_charge+i.factoring_interest+i.factoring_money+i.quality+i.discount) as totalRemitAmount,
+        i.order_id,i.order_num,xo.order_Num as source_rep_num, i.outstanding_receivables
+        FROM xq_remittance_detail i LEFT JOIN xq_order xo on
+        xo.id=i.order_id
+        where i.iz_delete =0 and i.order_num !='' GROUP BY i.order_id,i.order_num
+        ORDER BY i.order_num desc)
+
+        SELECT oed.id,
+        oed.source_rep_num,
+        oed.customer_order_num,
+        oed.bol,
+        oed.bol_time,
+        oed.pod_time,
+        oed.payment_expire_date,
+        oed.warehouse_id,
+        wh.name AS warehouseName,
+        oed.warehouse_lot,
+        oed.product_id,
+        prd.product_name_en as product_name,
+        oed.packaging,
+        oed.packaging_unit,
+        un.name AS packagingUnitTxt,
+        oed.exit_num,
+        oed.unit_price,
+        sum(oed.exit_money) exit_money,
+        oed.customer_id,
+        c.name AS customerName,
+        oed.invoice_num,
+        xoeh.warehouse_exit_no,
+        xoeh.receipt_date,
+        sum(oed.credit_insurance_premium) credit_insurance_premium,
+        oed.exchange_rate,
+        sum(oed.credit_insurance_premium_convert) credit_insurance_premium_convert,
+        oed.insurance_effective_date,
+        sum(
+        (
+        SELECT IFNULL(SUM(xrd.factoring_interest),0) FROM xq_remittance_detail xrd WHERE iz_delete = 0 AND  xrd.order_id = rt.order_id AND xrd.order_num = oed.`customer_order_num`
+        )
+        ) factoringInterest,
+        case
+        when
+        rt.totalRemitAmount IS NOT NULL
+        and (
+        sum(oed.exit_money)-ifnull(rt.totalRemitAmount,0) + (
+        -- 加额外费用
+        SELECT
+        IFNULL(SUM(oec.price),0)
+        FROM
+        xq_order_extra_cost oec
+        LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`
+
+        WHERE oec.iz_delete = 0
+        AND xo.order_num = oed.source_rep_num   AND oec.`customer_order_num` = oed.customer_order_num
+        )   - (
+        -- 订单扣除
+
+        SELECT
+        IFNULL(SUM(cms.amount),0) amount
+
+        FROM xq_order_commission cms
+        LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`
+
+        WHERE cms.iz_delete = 0
+
+        AND xo.order_num = oed.source_rep_num  AND cms.`customer_order_num` = oed.customer_order_num
+        AND cms.commission_type = 'ddkc'
+
+        ) &lt;= 0 )
+        then 3
+        when
+        rt.totalRemitAmount IS NULL
+        or (
+        sum(oed.exit_money)-ifnull(rt.totalRemitAmount,0) + (
+        -- 加额外费用
+        SELECT
+        IFNULL(SUM(oec.price),0)
+        FROM
+        xq_order_extra_cost oec
+        LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`
+
+        WHERE oec.iz_delete = 0
+        AND xo.order_num = oed.source_rep_num   AND oec.`customer_order_num` = oed.customer_order_num
+        )  - (
+        -- 订单扣除
+
+        SELECT
+        IFNULL(SUM(cms.amount),0) amount
+
+        FROM xq_order_commission cms
+        LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`
+
+        WHERE cms.iz_delete = 0
+
+        AND xo.order_num = oed.source_rep_num  AND cms.`customer_order_num` = oed.customer_order_num
+        AND cms.commission_type = 'ddkc'
+
+        ) = sum(oed.exit_money) )
+        then 1
+        else 2
+        end as remmitStatus
+        FROM xq_overseas_exit_detail oed
+        INNER JOIN xq_overseas_exit_head xoeh ON xoeh.id = oed.source_id AND xoeh.iz_delete = 0 AND
+        xoeh.audit_status = '1'
+        LEFT JOIN xq_warehouse wh ON wh.id = oed.warehouse_id
+        LEFT JOIN xq_product_info prd ON prd.id = oed.product_id
+        LEFT JOIN xq_unit un ON un.id = oed.packaging_unit
+        LEFT JOIN xq_customer c ON c.id = oed.customer_id
+        LEFT JOIN rt rt on TRIM(oed.customer_order_num) = TRIM(rt.order_num) and
+        TRIM(oed.source_rep_num)=TRIM(rt.source_rep_num)
+        where 1=1
+        and oed.iz_delete = 0
+        <if test="dto != null">
+
+            <if test="dto.bol != null and dto.bol != ''">
+                AND oed.bol LIKE CONCAT('%', Trim(#{dto.bol}), '%')
+            </if>
+            <if test="dto.insuranceEffectiveDateStart != null and '' != dto.insuranceEffectiveDateStart and dto.insuranceEffectiveDateEnd != null and '' != dto.insuranceEffectiveDateEnd">
+                AND oed.insurance_effective_date BETWEEN #{dto.insuranceEffectiveDateStart} AND #{dto.insuranceEffectiveDateEnd}
+            </if>
+            <if test="dto.bolTimeBegin != null and dto.bolTimeBegin != '' ">
+                AND oed.bol_time &gt;= #{dto.bolTimeBegin}
+            </if>
+            <if test="dto.bolTimeEnd != null and dto.bolTimeEnd != '' ">
+                AND oed.bol_time &lt;= #{dto.bolTimeEnd}
+            </if>
+            <if test="dto.customerName != null and dto.customerName != ''">
+                AND c.name LIKE CONCAT('%', #{dto.customerName}, '%')
+            </if>
+            <if test="dto.customerOrderNum != null and dto.customerOrderNum != ''">
+                AND oed.customer_order_num LIKE CONCAT('%', #{dto.customerOrderNum}, '%')
+            </if>
+            <if test="dto.sourceRepNum != null and dto.sourceRepNum != ''">
+                AND oed.source_rep_num LIKE CONCAT('%', #{dto.sourceRepNum}, '%')
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND prd.product_name_en LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+            <if test="dto.warehouseName != null and dto.warehouseName != ''">
+                AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+            </if>
+            <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+                AND oed.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+            </if>
+            <if test="dto.invoiceNum != null and dto.invoiceNum != ''">
+                AND oed.invoice_num LIKE CONCAT('%', #{dto.invoiceNum}, '%')
+            </if>
+        </if>
+        group by oed.source_rep_num, oed.customer_order_num
+        ) zzz
+        LEFT JOIN rt2 rt2 on TRIM(zzz.customer_order_num) = TRIM(rt2.order_num) and
+        TRIM(zzz.source_rep_num)=TRIM(rt2.source_rep_num)
+        where 1=1
+        <if test="dto.remmitStatus != null and dto.remmitStatus != ''">
+            AND find_in_set(zzz.remmitStatus, #{dto.remmitStatus})
+        </if>
+
+
+    </select>
+</mapper>

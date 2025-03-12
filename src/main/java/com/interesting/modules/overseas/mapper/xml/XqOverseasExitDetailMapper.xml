@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasExitDetailMapper">
+    <delete id="removeBySourceId">
+        DELETE FROM xq_overseas_exit_detail WHERE source_id = #{id}
+    </delete>
+    <select id="listDetailsById" resultType="com.interesting.modules.overseas.vo.ExitStorageDetailItemVO">
+        SELECT oed.id,
+               oed.source_id,
+               oed.warehouse_id,
+               oed.order_detail_id,
+               oed.customer_order_num,
+               oed.bol,
+               oed.bol_time,
+               oed.pod_time,
+               oed.payment_expire_date,
+               oed.deliver_method,
+               oed.special_remark,
+               wh.name AS warehouse_name,
+               oed.warehouse_lot,
+               oed.product_id,
+               prd.product_name,
+               oed.packaging,
+               oed.packaging_unit,
+               un.name AS packagingUnitTxt,
+               oed.exit_num,
+               oed.unit_price,
+               oed.exit_money,
+               oed.create_by,
+               oed.create_time,
+               oed.source_rep_num,
+               oed.customer_id,
+               c.name AS customerName,
+               oed.invoice_num,
+               oed.currency
+
+        FROM xq_overseas_exit_detail oed
+         LEFT JOIN xq_warehouse wh ON oed.warehouse_id = wh.id AND wh.iz_delete = 0
+         LEFT JOIN xq_product_info prd ON oed.product_id = prd.id AND prd.iz_delete = 0
+         LEFT JOIN xq_unit un ON un.id = oed.packaging_unit AND un.iz_delete = 0
+         LEFT JOIN xq_customer c ON c.id = oed.customer_id AND c.iz_delete = 0
+
+        WHERE oed.iz_delete = 0
+          AND oed.source_id = #{id}
+    </select>
+    <select id="pageSurplusOrder"
+            resultType="com.interesting.modules.overseas.vo.SurplusOrderPageVO2">
+        SELECT
+            ode.id,
+            ode.product_id,
+            prd.product_name,
+            ode.packaging,
+            ode.packaging_unit,
+            un.name AS packagingUnitTxt,
+            ode.total_boxes AS originNum,
+            IFNULL(SUM(oed.exit_num),0) AS yetExitNum,
+            (ode.total_boxes - IFNULL(SUM(oed.exit_num),0)) AS notExitNum,
+            ode.price_per_box AS unitPrice,
+            IFNULL((ode.total_boxes - IFNULL(SUM(oed.exit_num),0)) * ode.price_per_box,0) AS notExitMoney
+
+        FROM xq_order_detail ode
+                 LEFT JOIN xq_overseas_exit_detail oed ON oed.order_detail_id = ode.id AND oed.iz_delete = 0
+                 LEFT JOIN xq_product_info prd ON prd.id = ode.product_id AND prd.iz_delete = 0
+                 LEFT JOIN xq_unit un ON un.id = ode.packaging_unit AND un.iz_delete = 0
+        WHERE ode.iz_delete = 0
+          AND ode.order_id = #{dto.orderId}
+
+        GROUP BY ode.id
+        HAVING notExitMoney > 0
+    </select>
+
+
+    <select id="getPriceByCustomerNo"
+            resultType="java.math.BigDecimal">
+
+        SELECT
+               SUM(COALESCE(d.exit_money, 0.00)) AS exit_money
+        FROM (
+                 SELECT TRIM(#{orderNum}) AS source_rep_num, TRIM(#{customerNo}) AS customer_order_num
+             ) AS tmp
+                 LEFT JOIN xq_overseas_exit_detail AS d
+                           ON tmp.source_rep_num = TRIM(d.source_rep_num)
+                               AND tmp.customer_order_num = TRIM(d.customer_order_num)
+                               and d.`iz_delete` = 0
+    </select>
+<!--    <select id="getPriceByCustomerNo"-->
+<!--            resultType="java.math.BigDecimal">-->
+
+<!--        SELECT-->
+<!--               SUM(COALESCE(d.exit_money, 0.00)) - (-->
+
+<!--                SELECT-->
+<!--                    IFNULL(SUM(cms.amount),0) amount-->
+
+<!--                FROM xq_order_commission cms-->
+<!--                         LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`-->
+
+<!--                WHERE cms.iz_delete = 0-->
+
+<!--                  AND xo.order_num = TRIM(#{orderNum})  AND cms.`customer_order_num` = TRIM(#{customerNo})-->
+<!--                  AND cms.commission_type = 'ddkc'-->
+<!--                   )+ (-->
+<!--                   &#45;&#45; 加额外费用-->
+<!--                   SELECT-->
+<!--                   IFNULL(SUM(oec.price),0)-->
+<!--                   FROM-->
+<!--                   xq_order_extra_cost oec-->
+<!--                   LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`-->
+
+<!--                   WHERE oec.iz_delete = 0-->
+<!--                   AND xo.order_num = TRIM(#{orderNum})  AND oec.`customer_order_num` = TRIM(#{customerNo})-->
+<!--            )-->
+<!--             AS exit_money-->
+<!--        FROM (-->
+<!--                 SELECT TRIM(#{orderNum}) AS source_rep_num, TRIM(#{customerNo}) AS customer_order_num-->
+<!--             ) AS tmp-->
+<!--                 LEFT JOIN xq_overseas_exit_detail AS d-->
+<!--                           ON tmp.source_rep_num = TRIM(d.source_rep_num)-->
+<!--                               AND tmp.customer_order_num = TRIM(d.customer_order_num);-->
+<!--    </select>-->
+</mapper>

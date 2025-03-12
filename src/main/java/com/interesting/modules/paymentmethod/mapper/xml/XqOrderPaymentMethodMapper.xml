@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.paymentmethod.mapper.XqOrderPaymentMethodMapper">
+
+    <select id="queryByPage" resultType="com.interesting.modules.paymentmethod.vo.ListXqOrderPaymentMethodVO">
+        select id,
+               text,
+               value,
+               update_by,
+               update_time
+        from xq_order_payment_method xopm
+        where xopm.iz_delete = 0
+        <if test="dto.text != null and dto.text != ''">
+            and xopm.text like concat('%',#{dto.text},'%')
+        </if>
+
+        order by xopm.create_time desc
+    </select>
+
+
+
+</mapper>
+

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.workspace.mapper.XqWorkspaceFileMapper">
+
+
+    <select id="queryByPage" resultType="com.interesting.modules.workspace.vo.ListXqWorkspaceFileVO">
+        select
+        xwf.id, xwf.catalog_id, xwc.catalog_name, xwf.file_name, xwf.file_type, xwf.file_size, xwf.file_url, xwf.create_by, xwf.create_time
+        from xq_workspace_file xwf
+        left join xq_workspace_catalog  xwc on xwc.id = xwf.catalog_id
+        where xwf.iz_delete = 0
+        <if test="dto != null and dto.catalogId != null and dto.catalogId != ''">
+            and xwf.catalog_id in (
+            SELECT
+            a.id
+            FROM
+            (
+            SELECT
+            id,
+            create_time,
+            p_id,
+            IF
+            ( FIND_IN_SET( p_id, @pid ) > 0, @pid := CONCAT( @pid, ',', id ), 0 ) AS subset,
+            IF
+            ( FIND_IN_SET( id, @pid ) > 0, @pid := CONCAT( @pid, ',', id ), 0 ) AS oneself
+            FROM
+            xq_workspace_catalog
+            ) a,
+            ( SELECT @pid := #{dto.catalogId} b ) c
+            WHERE
+            a.subset != '0'
+            OR a.oneself != '0'
+            GROUP BY
+            a.id
+            order by create_time desc
+            )
+        </if>
+        <if test="dto != null and dto.fileName != null and dto.fileName !=''">
+            and xwf.file_name like concat('%',#{dto.fileName},'%')
+        </if>
+        <if test="dto != null and dto.enterPersonId != null and dto.enterPersonId != ''">
+            and xwf.create_by = #{dto.enterPersonId}
+        </if>
+        order by xwf.id desc, xwf.id
+
+    </select>
+
+
+</mapper>
+

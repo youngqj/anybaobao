@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.commission.mapper.XqOrderCommissionMapper">
+
+    <select id="pageCommissionTemp" resultType="com.interesting.modules.commission.vo.CommissionHistoryTmpVO">
+        SELECT cmht.id,
+               cmht.customer_id,
+               cmht.name,
+               cmht.create_by,
+               cmht.create_time
+        FROM xq_commission_history cmht
+        WHERE cmht.iz_delete = 0
+          AND cmht.customer_id = #{customerId}
+        <if test="dto.name != null and dto.name != ''">
+            AND cmht.name LIKE CONCAT('%', #{dto.name}, '%')
+        </if>
+        ORDER BY cmht.create_time DESC
+    </select>
+    <select id="pageCommissionTempDetails"
+            resultType="com.interesting.modules.commission.vo.CommissionHistoryTmpDetailsVO">
+        SELECT cmcp.id,
+               cmcp.customer_id,
+               cmcp.name AS companyName,
+               cmcp.requirements,
+               wt.item_text AS requirementsTxt,
+               cmcp.percentage
+
+        FROM xq_commission_company cmcp
+        <!-- 字典表 -->
+        LEFT JOIN sys_dict_item wt ON wt.item_value = cmcp.requirements AND wt.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'commission_require' AND iz_delete = 0) AND wt.iz_delete = 0
+
+        WHERE cmcp.iz_delete = 0
+          AND cmcp.template_id = #{templateId}
+        <if test="dto.companyName != null and dto.companyName != ''">
+            AND cmcp.name LIKE CONCAT('%', #{dto.companyName}, '%')
+        </if>
+        ORDER BY cmcp.create_time ASC
+    </select>
+</mapper>

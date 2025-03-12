@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.supplier.mapper.XqSupplierMapper">
+
+    <select id="pageList" resultType="com.interesting.modules.supplier.vo.XqSupplierVO">
+        SELECT sp.id,
+               sp.name,
+               sp.abbr,
+               sp.tax_num,
+               sp.tax_rate,
+               sp.contactor,
+               sp.email,
+               sp.phone,
+               sp.address,
+               sp.bank_deposit,
+               sp.bank_card_number,
+               sp.remark,
+               sp.create_by,
+               sp.create_time,
+               sp.type,
+               ftp.item_text AS typeTxt
+
+        FROM xq_supplier sp
+        <!-- 字典 -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = sp.type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'supplier_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+        WHERE sp.iz_delete = 0
+        <if test="dto.type != null and dto.type != ''">
+            AND sp.type = #{dto.type}
+        </if>
+        <if test="dto.name != null and dto.name != ''">
+            AND sp.name LIKE CONCAT('%', #{dto.name}, '%')
+        </if>
+        <if test="dto.abbr != null and dto.abbr != ''">
+            AND sp.abbr LIKE CONCAT('%', #{dto.abbr}, '%')
+        </if>
+        <if test="dto.taxNum != null and dto.taxNum != ''">
+            AND sp.tax_num LIKE CONCAT('%', #{dto.taxNum}, '%')
+        </if>
+        <if test="dto.contactor != null and dto.contactor != ''">
+            AND sp.contactor LIKE CONCAT('%', #{dto.contactor}, '%')
+        </if>
+        <if test="dto.email != null and dto.email != ''">
+            AND sp.email LIKE CONCAT('%', #{dto.email}, '%')
+        </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="getByName" resultType="com.interesting.modules.supplier.entity.XqSupplier">
+            select * from xq_supplier where type= 2 and name like CONCAT('%', #{name}, '%')  and iz_delete=0 limit 1
+    </select>
+</mapper>

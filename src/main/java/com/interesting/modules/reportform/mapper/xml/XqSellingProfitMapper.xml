@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.reportform.mapper.XqSellingProfitMapper">
+
+    <select id="pageSellProfitNew" resultType="com.interesting.modules.reportform.vo.SellProfitPageVO">
+
+        SELECT
+        xq_selling_profit.id,
+        IFNULL( DATE_FORMAT( xq_selling_profit.etd, '%Y/%m/%d' ), '' ) AS etd,
+        xq_selling_profit.customer_id,
+        xq_selling_profit.order_detail_id,
+        xq_selling_profit.customer_name,
+        xq_selling_profit.order_num,
+        xq_selling_profit.product_id,
+        xq_selling_profit.product_category,
+        xq_selling_profit.category,
+        xq_selling_profit.product_name,
+        ifnull(xq_selling_profit.collection_additional_fees, 0.00) collection_additional_fees,
+        ifnull(xq_selling_profit.total_boxes, 0) total_boxes,
+        ifnull(xq_selling_profit.total_weight, 0.00) total_weight,
+        ifnull(xq_selling_profit.price_per_box, 0.000) price_per_box,
+        ifnull(xq_selling_profit.price_per_lb, 0.000) price_per_lb,
+        ifnull(xq_selling_profit.sales_amount, 0.00) sales_amount,
+        ifnull(xq_selling_profit.unit_price, 0.00) unit_price,
+        ifnull(xq_selling_profit.weight, 0.00) weight,
+        ifnull(xq_selling_profit.purchase_amount, 0.00) purchase_amount,
+        ifnull(xq_selling_profit.customer_commission, 0.00) customer_commission,
+        ifnull(xq_selling_profit.third_part_import_commission, 0.00) third_part_import_commission,
+        ifnull(xq_selling_profit.middle_man_commission, 0.00) middle_man_commission,
+        ifnull(xq_selling_profit.quality_deduction, 0.00) quality_deduction,
+        ifnull(xq_selling_profit.discount, 0.00) discount,
+        ifnull(xq_selling_profit.service_charge, 0.00) service_charge,
+        ifnull(xq_selling_profit.credit_insurance_premium, 0.00) credit_insurance_premium,
+        ifnull(xq_selling_profit.total_credit_insurance_premium, 0.00) total_credit_insurance_premium,
+        ifnull(xq_selling_profit.factoring_interest, 0.00) factoring_interest,
+        ifnull(xq_selling_profit.accessory_purchase_total, 0.00) accessory_purchase_total,
+        ifnull(xq_selling_profit.accessory_purchase_total1, 0.00) accessory_purchase_total1,
+        ifnull(xq_selling_profit.accessory_purchase_total2, 0.00) accessory_purchase_total2,
+        ifnull(xq_selling_profit.total_accessory_purchase_total, 0.00) total_accessory_purchase_total,
+        ifnull(xq_selling_profit.total_accessory_purchase_total1, 0.00) total_accessory_purchase_total1,
+        ifnull(xq_selling_profit.total_accessory_purchase_total2, 0.00) total_accessory_purchase_total2,
+        ifnull(xq_selling_profit.before_departure_total, 0.00) before_departure_total,
+        ifnull(xq_selling_profit.insurance_fee, 0.00) insurance_fee,
+        ifnull(xq_selling_profit.total_insurance_fee, 0.00) total_insurance_fee,
+        ifnull(xq_selling_profit.domestic_shipping_fee, 0.00) domestic_shipping_fee,
+        ifnull(xq_selling_profit.customs_clearance_tax_fee, 0.00) customs_clearance_tax_fee,
+        ifnull(xq_selling_profit.foreign_customs_clearance_fee, 0.00) foreign_customs_clearance_fee,
+        ifnull(xq_selling_profit.foreign_truck_fee, 0.00) foreign_truck_fee,
+        xsci1.iz_default_color domesticShippingFeeColor,
+        xsci2.iz_default_color customsClearanceTaxFeeColor,
+        xsci3.iz_default_color foreignCustomsClearanceFeeColor,
+        xsci4.iz_default_color foreignTruckFeeColor,
+        ifnull(xq_selling_profit.extra_fee, 0.00) extra_fee,
+        ifnull(xq_selling_profit.travel_fee, 0.00) travel_fee,
+        ifnull(xq_selling_profit.total_travel_fee, 0.00) total_travel_fee,
+        ifnull(xq_selling_profit.tax_refund_amount, 0.00) tax_refund_amount,
+        ifnull(xq_selling_profit.cost_per_lb, 0.00) cost_per_lb,
+        ifnull(xq_selling_profit.sell_profit, 0.00) sell_profit,
+        ifnull(xq_selling_profit.lcl_sell_profit, 0.00) lcl_sell_profit,
+        ifnull(xq_selling_profit.exchange_rate, 0.00) exchange_rate,
+        ifnull(xq_selling_profit.all_cost, 0.00) all_cost,
+        xq_selling_profit.supplier_id,
+        xq_selling_profit.supplier_name,
+        xq_selling_profit.raw_currency,
+        ifnull(xq_selling_profit.ratio, 0.00) ratio,
+        ifnull(xq_selling_profit.record_count, 0) record_count,
+        ifnull(xq_selling_profit.total_middle_man_commission, 0.00) total_middle_man_commission,
+        ifnull(xq_selling_profit.total_customer_commission, 0.00) total_customer_commission,
+        ifnull(xq_selling_profit.total_quality_deduction, 0.00) total_quality_deduction,
+        ifnull(xq_selling_profit.total_discount, 0.00) total_discount,
+        ifnull(xq_selling_profit.total_factoring_interest, 0.00) total_factoring_interest,
+        ifnull(xq_selling_profit.total_domestic_shipping_fee, 0.00) total_domestic_shipping_fee,
+        ifnull(xq_selling_profit.total_before_departure_total, 0.00) total_before_departure_total,
+        ifnull(xq_selling_profit.total_service_charge, 0.00) total_service_charge,
+        ifnull(xq_selling_profit.total_customs_clearance_tax_fee, 0.00) total_customs_clearance_tax_fee,
+        ifnull(xq_selling_profit.total_foreign_customs_clearance_fee, 0.00) total_foreign_customs_clearance_fee,
+        ifnull(xq_selling_profit.total_extra_fee, 0.00) total_extra_fee,
+        ifnull(xq_selling_profit.total_collection_additional_fees, 0.00) total_collection_additional_fees,
+        ifnull(xq_selling_profit.total_foreign_truck_fee, 0.00) total_foreign_truck_fee,
+        ifnull(xq_selling_profit.return_fee, 0.00) return_fee,
+        ifnull(xq_selling_profit.total_third_part_import_commission, 0.00) total_third_part_import_commission,
+        ifnull(xq_selling_profit.cut_amount, 0.00) cut_amount
+        FROM xq_selling_profit
+        left outer join xq_order on xq_order.order_num = xq_selling_profit.order_num and xq_order.iz_delete = 0
+        left join xq_freight_cost_info xsci1 on xsci1.order_id = xq_order.id and xsci1.iz_delete = 0 and xsci1.fee_type = 'gnhyf' and xsci1.iz_domestic = 1
+        left join xq_freight_cost_info xsci2 on xsci2.order_id = xq_order.id and xsci2.iz_delete = 0 and xsci2.fee_type = 'qggs' and xsci2.iz_domestic = 0
+        left join xq_freight_cost_info xsci3 on xsci3.order_id = xq_order.id and xsci3.iz_delete = 0 and xsci3.fee_type = 'gwqgf' and xsci3.iz_domestic = 0
+        left join xq_freight_cost_info xsci4 on xsci4.order_id = xq_order.id and xsci4.iz_delete = 0 and xsci4.fee_type like 'gwkcf%' and xsci4.iz_domestic = 0
+        <where>
+            xq_selling_profit.iz_delete = 0
+
+            <if test="dto.etdBegin != null and dto.etdBegin != ''">
+                AND xq_selling_profit.etd &gt;= #{dto.etdBegin}
+            </if>
+            <if test="dto.etdEnd != null and dto.etdEnd != ''">
+                AND xq_selling_profit.etd &lt;= #{dto.etdEnd}
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND xq_selling_profit.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+
+            <if test="customerIds != null">
+                AND xq_selling_profit.customer_id in
+                <foreach collection="customerIds" item="customerId" separator="," open="(" close=")">
+                    #{customerId}
+                </foreach>
+            </if>
+            <if test="dto.orderNum != null and dto.orderNum != ''">
+                AND xq_selling_profit.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+            </if>
+
+            <if test="dto.productCategory != null and dto.productCategory != ''">
+                AND xq_selling_profit.product_category = #{dto.productCategory}
+            </if>
+
+        </where>
+        group by xq_selling_profit.id
+        order by xq_selling_profit.etd
+        <if test="dto.reportFormTimeOrder != null and dto.reportFormTimeOrder !='' and dto.reportFormTimeOrder == 'desc'">
+            desc
+        </if>
+
+        ,xq_order.create_time,xq_selling_profit.order_num desc,xq_selling_profit.order_detail_id asc
+
+    </select>
+
+    <select id="getTotal" resultType="com.interesting.modules.reportform.vo.SellProfitTotalVO">
+
+        SELECT
+        ifnull(SUM(sell_profit), 0.00) totalSellProfit,
+        ifnull(SUM(sales_amount), 0.00) totalSalesAmount,
+        ifnull(SUM(purchase_amount), 0.00) totalPurchaseAmount,
+        ifnull(SUM(return_fee), 0.00) totalReturnFee,
+        ifnull(SUM(extra_fee), 0.00) totalExtraFee,
+        ifnull(SUM(customer_commission), 0.00) totalcCstomerCommission,
+        ifnull(SUM(third_part_import_commission), 0.00) totalThirdPartImportCommission,
+        ifnull(SUM(middle_man_commission), 0.00) totalMiddleManCommission,
+        ifnull(SUM(quality_deduction), 0.00) totalQualityDeduction,
+        ifnull(SUM(discount), 0.00) totalDiscount,
+        ifnull(SUM(service_charge), 0.00) totalServiceCharge,
+        ifnull(SUM(credit_insurance_premium), 0.00) totalCreditInsurancePremium,
+        ifnull(SUM(factoring_interest), 0.00) totalFactoringInterest,
+        ifnull(SUM(accessory_purchase_total) + SUM(accessory_purchase_total1), 0.00) AS totalAccessoryPurchaseTotal,
+        -- SUM(accessory_purchase_total1) totalAccessoryPurchaseTotal1,
+        ifnull(SUM(before_departure_total), 0.00) totalBeforeDepartureTotal,
+        ifnull(SUM(insurance_fee), 0.00) totalInsuranceFee,
+        ifnull(SUM(domestic_shipping_fee), 0.00) totalDomesticShippingFee,
+        ifnull(SUM(customs_clearance_tax_fee), 0.00) totalCustomsClearanceTaxFee,
+        ifnull(SUM(foreign_customs_clearance_fee), 0.00) totalForeignCustomsClearanceFee,
+        ifnull(SUM(foreign_truck_fee), 0.00) totalForeignTruckFee,
+        ifnull(SUM(travel_fee), 0.00) totalTravelFee,
+        ifnull(SUM(tax_refund_amount), 0.00) totalTaxRefundAmount,
+        ifnull(SUM(lcl_sell_profit), 0.00) totalLclSellProfit,
+        ifnull(SUM(collection_additional_fees), 0.00) totalCollectionAdditionalFees,
+        ifnull(SUM(weight), 0.00) totalWeight,
+        ifnull(sum(ifnull(cut_amount, 0.00)), 0.00) cut_amount
+
+
+        FROM xq_selling_profit
+
+        <where>
+            iz_delete = 0
+
+            <if test="dto.etdBegin != null and dto.etdBegin != ''">
+                AND etd &gt;= #{dto.etdBegin}
+            </if>
+            <if test="dto.etdEnd != null and dto.etdEnd != ''">
+                AND etd &lt;= #{dto.etdEnd}
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND product_name LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+
+            <if test="customerIds != null">
+                AND customer_id in
+                <foreach collection="customerIds" item="customerId" separator="," open="(" close=")">
+                    #{customerId}
+                </foreach>
+            </if>
+            <if test="dto.orderNum != null and dto.orderNum != ''">
+                AND order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+            </if>
+
+            <if test="dto.productCategory != null and dto.productCategory != ''">
+                AND product_category = #{dto.productCategory}
+            </if>
+
+        </where>
+
+
+    </select>
+
+    <select id="getSellingProfitListByOrderId" resultType="com.interesting.modules.reportform.entity.XqSellingProfit">
+        SELECT
+            *
+        FROM
+            `xq_selling_profit`
+        WHERE iz_delete = 0
+          AND order_detail_id IN (
+                SELECT id FROM xq_order_detail WHERE order_id = #{orderId}
+              )
+    </select>
+</mapper>

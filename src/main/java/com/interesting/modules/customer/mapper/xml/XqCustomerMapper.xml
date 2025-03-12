@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.customer.mapper.XqCustomerMapper">
+
+    <select id="pageList" resultType="com.interesting.modules.customer.vo.XqCustomerVO">
+        SELECT c.id,
+               c.name,
+               c.abbr,
+               c.tax_num,
+               c.contactor,
+               c.email,
+               c.phone,
+               c.address,
+               c.bank_deposit,
+               c.bank_card_number,
+               c.remark,
+               c.create_by,
+               c.create_time
+        FROM xq_customer c
+        WHERE c.iz_delete = 0
+        <if test="dto != null">
+            <if test="dto.name != null and dto.name != ''">
+                AND c.name LIKE CONCAT('%', #{dto.name}, '%')
+            </if>
+            <if test="dto.abbr != null and dto.abbr != ''">
+                AND c.abbr LIKE CONCAT('%', #{dto.abbr}, '%')
+            </if>
+            <if test="dto.taxNum != null and dto.taxNum != ''">
+                AND c.tax_num LIKE CONCAT('%', #{dto.taxNum}, '%')
+            </if>
+            <if test="dto.contactor != null and dto.contactor != ''">
+                AND c.contactor LIKE CONCAT('%', #{dto.contactor}, '%')
+            </if>
+            <if test="dto.email != null and dto.email != ''">
+                AND c.email LIKE CONCAT('%', #{dto.email}, '%')
+            </if>
+        </if>
+        ORDER BY c.create_time DESC
+    </select>
+
+    <select id="listCustomer" resultType="com.interesting.modules.customer.vo.CustomerIdNameAndAddressVO">
+        select
+            xc.id,xc.name customerName,xc.address
+        from xq_customer xc
+        where xc.iz_delete = 0
+
+    </select>
+
+</mapper>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.order.mapper.XqOrderTransferRecordMapper">
+
+    <select id="listTransferRecord" resultType="com.interesting.modules.order.vo.ListXqOrderTransferRecordVO">
+        select
+            xotr.id,
+            userFrom.realname transferFrom,
+            userTo.realname transferTo,
+            xotr.create_time
+
+        from xq_order_transfer_record xotr
+        left join sys_user userFrom on xotr.transfer_from = userFrom.id
+        left join sys_user userTo on xotr.transfer_to = userTo.id
+        where xotr.iz_delete = 0 and xotr.order_id = #{orderId}
+    </select>
+
+
+
+
+</mapper>
+

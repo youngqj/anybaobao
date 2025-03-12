@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.warehouse.mapper.XqWarehouseMapper">
+
+    <select id="warehousePage" resultType="com.interesting.modules.warehouse.vo.XqWarehouseVO">
+        SELECT warehouse.id,
+               warehouse.serial_num,
+               warehouse.name,
+               warehouse.warehouse_type,
+        warehouse.address,
+               ftp.item_text AS warehouseTypeTxt,
+               warehouse.create_by,
+               warehouse.create_time
+        FROM xq_warehouse warehouse
+        <!-- 字典查 purchase_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = warehouse.warehouse_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'warehouse_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        WHERE warehouse.iz_delete = 0
+        <if test="dto.serialNum != null and dto.serialNum != ''">
+            AND warehouse.serial_num LIKE CONCAT('%', #{dto.serialNum}, '%')
+        </if>
+        <if test="dto.name != null and dto.name != ''">
+            AND warehouse.name LIKE CONCAT('%', #{dto.name}, '%')
+        </if>
+        <if test="dto.warehouseType != null and dto.warehouseType != ''">
+            AND warehouse.warehouse_type = #{dto.warehouseType}
+        </if>
+
+        ORDER BY warehouse.name
+    </select>
+<!--    <select id="listAccInventoryPage"-->
+<!--            resultType="com.interesting.modules.accmaterial.vo.AccInventoryPageVO">-->
+<!--        SELECT w.name AS warehouse_name,-->
+<!--               a.accessory_name,-->
+<!--               a.size,-->
+<!--               IFNULL(SUM(i.num), 0) AS inventoryNum,-->
+<!--               w.id AS warehouseId,-->
+<!--               a.id AS accessoryId,-->
+<!--               a.material_specification-->
+
+<!--        FROM xq_warehouse w-->
+<!--        CROSS JOIN xq_accessory_info a-->
+<!--        LEFT JOIN xq_inventory i ON w.id = i.warehouse_id AND a.id = i.item_id AND i.iz_delete = 0-->
+<!--        WHERE w.iz_delete = 0-->
+<!--        AND a.iz_delete = 0-->
+
+<!--        <if test="dto.warehouseName != null and dto.warehouseName != ''">-->
+<!--            AND w.name LIKE CONCAT('%', #{dto.warehouseName}, '%')-->
+<!--        </if>-->
+<!--        <if test="dto.accessoryName != null and dto.accessoryName != ''">-->
+<!--            AND a.accessory_name LIKE CONCAT('%', #{dto.accessoryName}, '%')-->
+<!--        </if>-->
+<!--        <if test="dto.accessoryId != null and dto.accessoryId != ''">-->
+<!--            AND a.id = #{dto.accessoryId}-->
+<!--        </if>-->
+<!--        <if test="dto.warehouseId != null and dto.warehouseId != ''">-->
+<!--            AND w.id = #{dto.warehouseId}-->
+<!--        </if>-->
+
+<!--        GROUP BY w.id, a.id, w.name, a.accessory_name-->
+
+<!--        ORDER BY w.name, a.accessory_name-->
+<!--    </select>-->
+    <select id="listAccInventoryPage"
+            resultType="com.interesting.modules.accmaterial.vo.AccInventoryPageVO">
+        SELECT xi.source_rep_num AS receipt_num,
+        xi.item_id AS accessory_id,
+        xi.warehouse_id,
+        wh.name AS warehouseName,
+        acc.accessory_name,
+        acc.size,
+        acc.material_specification,
+        SUM(xi.num) AS inventoryNum
+
+
+        FROM xq_inventory xi
+        LEFT JOIN xq_accessory_info acc ON acc.id = xi.item_id AND acc.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = xi.warehouse_id AND wh.iz_delete = 0
+        WHERE xi.iz_delete = 0
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.accessoryName != null and dto.accessoryName != ''">
+            AND acc.accessory_name LIKE CONCAT('%', #{dto.accessoryName}, '%')
+        </if>
+        <if test="dto.accessoryId != null and dto.accessoryId != ''">
+            AND acc.id = #{dto.accessoryId}
+        </if>
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND wh.id = #{dto.warehouseId}
+        </if>
+        GROUP BY accessory_id, warehouse_id
+
+
+    </select>
+    <select id="listAccInventoryPage2"
+            resultType="com.interesting.modules.accmaterial.vo.AccInventoryPageVO2">
+        SELECT xi.source_rep_num AS receipt_num,
+        xi.unit_price AS unit_price,
+        xi.item_id AS accessory_id,
+        xi.warehouse_id,
+        wh.name AS warehouseName,
+        acc.accessory_name,
+        acc.size,
+        acc.material_specification,
+        SUM(xi.num) AS inventoryNum,
+        xi.currency AS currency
+
+        FROM xq_inventory xi
+        LEFT JOIN xq_accessory_info acc ON acc.id = xi.item_id AND acc.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = xi.warehouse_id AND wh.iz_delete = 0
+        WHERE xi.iz_delete = 0
+        <if test="dto.warehouseName != null and dto.warehouseName != ''">
+            AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+        </if>
+        <if test="dto.accessoryName != null and dto.accessoryName != ''">
+            AND acc.accessory_name LIKE CONCAT('%', #{dto.accessoryName}, '%')
+        </if>
+        <if test="dto.accessoryId != null and dto.accessoryId != ''">
+            AND acc.id = #{dto.accessoryId}
+        </if>
+        <if test="dto.warehouseId != null and dto.warehouseId != ''">
+            AND wh.id = #{dto.warehouseId}
+        </if>
+        <if test="dto.receiptNum != null and dto.receiptNum != ''">
+            AND xi.source_rep_num LIKE CONCAT('%', #{dto.receiptNum}, '%')
+        </if>
+        <if test="dto.unitPrice != null">
+            AND xi.unit_price = #{dto.unitPrice}
+        </if>
+
+        GROUP BY unit_price, accessory_id, warehouse_id, currency,xi.source_rep_num
+        HAVING inventoryNum !=0
+
+
+    </select>
+
+    <select id="listWarehouse" resultType="com.interesting.modules.warehouse.vo.WarehouseIdNameAndAddressVO">
+        select
+            xw.id,xw.name warehouseName,xw.address
+        from xq_warehouse xw
+        where xw.iz_delete = 0
+
+    </select>
+
+    <select id="getWarehouseName" resultType="string">
+        SELECT DISTINCT xw.`name` FROM `xq_overseas_exit_detail` oed
+                                           LEFT JOIN xq_warehouse xw ON xw.`id` = oed.`warehouse_id`
+    </select>
+    <select id="getDetailById" resultType="com.interesting.modules.warehouse.vo.XqWarehouseVO">
+        SELECT warehouse.id,
+        warehouse.serial_num,
+        warehouse.name,
+        warehouse.warehouse_type,
+        warehouse.address,
+        ftp.item_text AS warehouseTypeTxt,
+        warehouse.create_by,
+        warehouse.create_time
+        FROM xq_warehouse warehouse
+        <!-- 字典查 purchase_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = warehouse.warehouse_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'warehouse_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        WHERE warehouse.iz_delete = 0
+        and warehouse.id = #{id}
+    </select>
+
+</mapper>

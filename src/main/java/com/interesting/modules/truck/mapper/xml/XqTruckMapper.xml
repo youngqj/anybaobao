@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.truck.mapper.XqTruckMapper">
+    <select id="page" resultType="com.interesting.modules.truck.vo.XqTruckListVO">
+        select id,
+        order_num,
+        customer_order_num,
+        happen_date,
+        customer,
+        product_name,
+        loading_warehouse,
+        un_loading_warehouse,
+        arrival_time,
+        truck,
+        price,
+        price_detail,
+        payment,
+        payment_time,
+        remark,
+        confirm_finance
+        from xq_truck
+        where iz_delete=0
+        <if test="dto != null">
+            <if test="dto.orderNum != null and dto.orderNum != ''">
+                AND order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+            </if>
+            <if test="dto.truck != null and dto.truck != ''">
+                AND truck LIKE CONCAT('%', #{dto.truck}, '%')
+            </if>
+        </if>
+        order by create_time desc
+    </select>
+
+
+</mapper>

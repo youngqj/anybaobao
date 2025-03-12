@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.unit.mapper.XqUnitMapper">
+
+    <select id="pageList" resultType="com.interesting.modules.unit.entity.XqUnit">
+        SELECT * from xq_unit
+        WHERE iz_delete = 0
+        <if test="dto != null">
+            <if test="dto.unitName != null and '' != dto.unitName">
+                AND `name` LIKE CONCAT('%', #{dto.unitName}, '%')
+            </if>
+        </if>
+        ORDER BY create_time DESC
+    </select>
+</mapper>

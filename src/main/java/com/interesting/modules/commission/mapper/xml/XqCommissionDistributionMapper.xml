@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.commission.mapper.XqCommissionDistributionMapper">
+    <select id="commissionOrderList" resultType="com.interesting.modules.orderdetail.vo.XqCommissionOrderVO">
+        SELECT
+        DISTINCT
+        order_detail_id,
+        id,
+        product_id,
+        productCategory,
+        product_name,
+        product_name_en,
+        layout_requirements,
+        product_specs,
+        product_grade,
+        packaging,
+        packagingUnit,
+        commission_price
+        FROM
+        (
+        SELECT
+        xcd.order_detail_id,
+        xcd.id,
+        xpi.id AS product_id,
+        xpc.category AS productCategory,
+        xpi.product_name,
+        xpi.product_name_en,
+        xod.layout_requirements,
+        xpi.product_specs,
+        xpi.product_grade,
+        xpi.packaging,
+        xu.`name` AS packagingUnit,
+        xcd.commission_price
+        FROM
+        xq_commission_distribution xcd
+        LEFT JOIN xq_order_detail xod ON xcd.order_detail_id = xod.id
+        LEFT JOIN xq_product_info xpi ON xpi.id = xod.product_id
+        LEFT JOIN xq_product_category xpc ON xpi.product_category = xpc.id
+        LEFT JOIN xq_unit xu ON xpi.packaging_unit = xu.id
+        WHERE
+        1 = 1
+        <if test="orderId != null and orderId != ''">
+            AND xod.order_id=#{orderId}
+        </if>
+        AND xcd.iz_delete = 0 UNION ALL
+        SELECT
+        xod.id AS order_detail_id,
+        '' AS id,
+        xpi.id AS product_id,
+        xpc.category AS productCategory,
+        xpi.product_name,
+        xpi.product_name_en,
+        xod.layout_requirements,
+        xpi.product_specs,
+        xpi.product_grade,
+        xpi.packaging,
+        xu.`name` AS packagingUnit,
+        0.00 AS commission_price
+        FROM
+        xq_order_detail xod
+        LEFT JOIN xq_product_info xpi ON xpi.id = xod.product_id
+        LEFT JOIN xq_product_category xpc ON xpi.product_category = xpc.id
+        LEFT JOIN xq_unit xu ON xpi.packaging_unit = xu.id
+        WHERE
+        1 = 1
+        <if test="orderId != null and orderId != ''">
+            AND xod.order_id=#{orderId}
+        </if>
+        AND xod.iz_delete = 0
+        ) zzz GROUP BY order_detail_id ORDER BY order_detail_id asc
+
+    </select>
+
+
+    <select id="commissionOrderList1" resultType="com.interesting.modules.orderdetail.vo.XqCommissionOrderVO">
+        SELECT
+        xod.id as order_detail_id,
+        '' as id,
+        xpc.category as productCategory,
+        xpi.id as product_id,
+        xpi.product_name,
+        xpi.product_name_en,
+        xod.layout_requirements,
+        xpi.product_specs,
+        xpi.product_grade,
+        xpi.packaging,
+        xu.`name` as packagingUnit,
+        0.00 as commission_price
+        FROM
+        xq_order_detail xod
+        LEFT JOIN xq_product_info xpi ON xpi.id = xod.product_id
+        LEFT JOIN xq_product_category xpc ON xpi.product_category = xpc.id
+        LEFT JOIN xq_unit xu ON xpi.packaging_unit = xu.id
+        where 1=1
+        <if test="orderId != null and orderId != ''">
+            AND xod.order_id=#{orderId}
+        </if>
+        ORDER BY
+        xod.id ASC
+    </select>
+
+</mapper>

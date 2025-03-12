@@ -1,0 +1,6 @@
+spring:
+  url:
+  application:
+    name: trade-manage
+  profiles:
+    active: dev

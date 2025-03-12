@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasTransferDetailMapper">
+
+    <select id="getInventoryTransferDetListById"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryTransferDetailRecordVO">
+        SELECT oicd.id,
+               oicd.source_id,
+               xw.name as warehouseName,
+               oicd.transfer_warehouse_id,
+               oicd.product_id,
+               prd.product_name,
+               oicd.current_inventory,
+               oicd.transfer_inventory,
+               oicd.warehouse_lot,
+               oicd.new_warehouse_lot,
+               oicd.source_rep_num,
+               prd.packaging,
+               prd.packaging_unit,
+               prd.product_specs,
+               un.name AS packagingUnitTxt,
+               oicd.unit_price
+
+
+        FROM xq_overseas_transfer_detail oicd
+         LEFT JOIN xq_product_info prd ON prd.id = oicd.product_id
+         LEFT JOIN xq_unit un ON un.id = prd.packaging_unit
+           LEFT JOIN xq_warehouse xw ON xw.id = oicd.source_warehouse_id
+
+        WHERE oicd.iz_delete = 0
+          AND oicd.source_id = #{id}
+    </select>
+</mapper>

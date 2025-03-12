@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.order.mapper.XqOrderFinallyConfirmMapper">
+
+    <select id="selectOrderNumByRoleCodes" resultType="java.lang.String">
+
+        SELECT order_num
+        FROM xq_order
+        WHERE iz_delete = 0
+          AND follower_audit = #{followerAudit}
+          <if test="izRole != null">
+              AND id IN (
+              SELECT DISTINCT order_id FROM xq_order_finally_confirm
+              WHERE iz_delete = 0 AND
+              role_id = #{izRole}
+              )
+          </if>
+
+        <if test="roleCode != null and (roleCode == 10 or roleCode == 3)">
+            AND actual_delivery_date is not null
+        </if>
+          AND id NOT IN (
+            SELECT DISTINCT order_id FROM xq_order_finally_confirm
+            WHERE iz_delete = 0 AND
+                  role_id = #{roleCode}
+                  and user_id = #{userId}
+              )
+        ORDER BY actual_delivery_date DESC
+    </select>
+
+    <select id="selectOrderNumByRoles" resultType="java.lang.String">
+
+        SELECT order_num
+        FROM xq_order
+        WHERE iz_delete = 0
+          AND follower_audit = #{followerAudit}
+          AND id IN (
+            SELECT DISTINCT order_id FROM xq_order_finally_confirm
+            WHERE iz_delete = 0
+              AND role_id = #{izRole}
+              AND order_id IN (
+                SELECT DISTINCT order_id FROM xq_order_finally_confirm
+                WHERE iz_delete = 0
+                  AND role_id = #{shippingRole}
+            )
+              )
+
+          AND id NOT IN (
+            SELECT DISTINCT order_id FROM xq_order_finally_confirm
+            WHERE iz_delete = 0 AND
+                  role_id = #{roleCode}
+              )
+    </select>
+
+
+
+</mapper>
+

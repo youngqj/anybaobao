@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasWarehouseFeeMapper">
+    <resultMap id="singleResultMap" type="com.interesting.modules.overseas.vo.OverseasWarehouseFeeVO">
+        <id column="id" property="id"/>
+        <result column="warehouse_id" property="warehouseId"/>
+        <result column="warehouse_name" property="warehouseName"/>
+        <result column="enter_warehouse_fee" property="enterWarehouseFee"/>
+        <result column="first_month_fee" property="firstMonthFee"/>
+        <result column="second_month_fee" property="secondMonthFee"/>
+        <result column="third_month_fee" property="thirdMonthFee"/>
+        <result column="fourth_month_fee" property="fourthMonthFee"/>
+        <result column="fifth_month_fee" property="fifthMonthFee"/>
+        <result column="sixth_month_fee" property="sixthMonthFee"/>
+        <result column="seventh_month_fee" property="seventhMonthFee"/>
+        <result column="eighth_month_fee" property="eighthMonthFee"/>
+        <result column="ninth_month_fee" property="ninthMonthFee"/>
+        <result column="tenth_month_fee" property="tenthMonthFee"/>
+        <result column="eleventh_month_fee" property="eleventhMonthFee"/>
+        <result column="twelfth_month_fee" property="twelfthMonthFee"/>
+        <result column="transfer_charge" property="transferCharge"/>
+        <result column="grade_a_pallets" property="gradeAPallets"/>
+        <result column="grade_b_pallets" property="gradeBPallets"/>
+        <result column="sorting_fee" property="sortingFee"/>
+        <result column="shrink_wrap" property="shrinkWrap"/>
+        <result column="rate" property="rate"/>
+        <result column="delivery_operation_fee" property="deliveryOperationFee"/>
+        <result column="carry_box_fee" property="carryBoxFee"/>
+        <result column="transfer_account_release" property="transferAccountRelease"/>
+        <collection property="splitFeeDTOList" javaType="java.util.List"
+                    ofType="com.interesting.modules.overseas.vo.SplitFeeVO">
+            <id property="id" column="tid"/>
+            <result property="warehouseFeeId" column="warehouse_fee_id"/>
+            <result property="lotStart" column="lot_start"/>
+            <result property="lotEnd" column="lot_end"/>
+            <result property="price" column="price"/>
+        </collection>
+    </resultMap>
+    <select id="queryByPage"
+            resultType="com.interesting.modules.overseas.vo.ListWarehouseFeeVO">
+        SELECT owf.id,
+             --  owf.year,
+               wh.name AS warehouseName,
+              owf.first_month_fee,
+              owf.second_month_fee,
+              owf.third_month_fee,
+              owf.fourth_month_fee,
+              owf.sorting_fee,
+              owf.fifth_month_fee
+        FROM xq_overseas_warehouse_fee owf
+        LEFT JOIN xq_warehouse wh ON wh.id = owf.warehouse_id AND wh.iz_delete = 0
+        WHERE owf.iz_delete = 0
+        <if test="dto.warehouseId != null and dto.warehouseId != '' ">
+            AND owf.warehouse_id =#{dto.warehouseId}
+        </if>
+
+        ORDER BY owf.create_time DESC
+    </select>
+
+
+    <select id="queryById"
+            resultMap="singleResultMap">
+        SELECT owf.id,
+               wh.name AS warehouseName,
+               owf.warehouse_id,
+               owf.enter_warehouse_fee,
+              owf.first_month_fee,
+              owf.second_month_fee,
+              owf.third_month_fee,
+              owf.fourth_month_fee,
+              owf.fifth_month_fee,
+              owf.`sixth_month_fee`,
+              owf.`seventh_month_fee`,
+              owf.`eighth_month_fee`,
+              owf.`ninth_month_fee`,
+              owf.`tenth_month_fee`,
+              owf.`eleventh_month_fee`,
+              owf.`twelfth_month_fee`,
+              owf.`transfer_charge`,
+              owf.`grade_a_pallets`,
+              owf.`grade_b_pallets`,
+              owf.`shrink_wrap`,
+              owf.`rate`,
+              owf.`delivery_operation_fee`,
+              owf.`carry_box_fee`,
+              owf.`transfer_account_release`,
+              xsf.id as tid,
+              xsf.warehouse_fee_id,
+              xsf.lot_start,
+              xsf.lot_end,
+              xsf.price,
+              owf.sorting_fee
+
+        FROM xq_overseas_warehouse_fee owf
+        LEFT JOIN xq_warehouse wh ON wh.id = owf.warehouse_id AND wh.iz_delete = 0
+        left join xq_split_fee xsf on owf.id=xsf.warehouse_fee_id and xsf.iz_delete=0
+        WHERE owf.iz_delete = 0 and owf.id = #{id}
+    </select>
+</mapper>

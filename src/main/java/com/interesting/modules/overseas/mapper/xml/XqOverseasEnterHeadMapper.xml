@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasEnterHeadMapper">
+    <select id="pageEnterStorage" resultType="com.interesting.modules.overseas.vo.EnterStoragePageVO">
+        SELECT oeh.id,
+               oeh.warehouse_enter_no,
+               oeh.order_num,
+               oeh.receipt_date,
+               oeh.create_by,
+               oeh.create_time,
+        GROUP_CONCAT(DISTINCT concat(prd.product_name,'(',prd.packaging,' ',case prd.packaging_unit when 1 then 'kg'
+        when 2 then 'lbs' end,')') SEPARATOR ' | ' ) AS productInfo,
+               oeh.audit_status
+
+
+        FROM xq_overseas_enter_head oeh
+        LEFT JOIN xq_overseas_enter_detail oehd ON oeh.id = oehd.source_id AND oehd.iz_delete = 0
+        LEFT JOIN xq_product_info prd ON prd.id = oehd.product_id AND prd.iz_delete = 0
+
+
+        WHERE oeh.iz_delete = 0
+        <if test="dto.warehouseEnterNo != null and dto.warehouseEnterNo != ''">
+            AND oeh.warehouse_enter_no LIKE CONCAT('%', #{dto.warehouseEnterNo}, '%')
+        </if>
+        <if test="dto.orderNum != null and dto.orderNum != ''">
+            AND oeh.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+        </if>
+        <if test="dto.receiptDateBegin != null and dto.receiptDateBegin != ''">
+            AND oeh.receipt_date &gt;= #{dto.receiptDateBegin}
+        </if>
+        <if test="dto.receiptDateEnd != null and dto.receiptDateEnd != ''">
+            AND oeh.receipt_date &lt;= #{dto.receiptDateEnd}
+        </if>
+
+        GROUP BY oeh.id, oeh.create_time
+
+        ORDER BY oeh.create_time DESC
+
+    </select>
+    <select id="pageEnterStorageDetail"
+            resultType="com.interesting.modules.overseas.vo.EnterStorageDetailPageVO">
+        SELECT oed.id,
+               oed.warehouse_id,
+               wh.name AS warehouseName,
+               oed.warehouse_lot,
+               oed.product_id,
+               prd.product_name,
+               oed.packaging,
+               oed.packaging_unit,
+               un.name AS packagingUnitTxt,
+               oed.enter_num,
+               oed.unit_price,
+               oed.enter_money,
+               xoeh.warehouse_enter_no,
+               xoeh.order_num,
+               xoeh.receipt_date,
+               oed.gross_weight_per_box,
+               oed.pallet_num,
+               oed.gross_weight_total
+
+        FROM xq_overseas_enter_detail oed
+            INNER JOIN xq_overseas_enter_head xoeh ON oed.source_id = xoeh.id AND xoeh.iz_delete = 0 AND
+                                                      xoeh.audit_status = '1'
+            LEFT JOIN xq_warehouse wh ON wh.id = oed.warehouse_id AND wh.iz_delete = 0
+            LEFT JOIN xq_product_info prd ON prd.id = oed.product_id AND prd.iz_delete = 0
+            LEFT JOIN xq_unit un ON un.id = oed.packaging_unit AND un.iz_delete = 0
+        WHERE oed.iz_delete = 0
+          <if test="dto != null">
+
+                <if test="dto.receiptDateBegin != null and dto.receiptDateBegin !='' ">
+                    AND xoeh.receipt_date &gt;= #{dto.receiptDateBegin}
+                </if>
+                <if test="dto.receiptDateEnd != null and dto.receiptDateEnd !='' ">
+                    AND xoeh.receipt_date &lt;= #{dto.receiptDateEnd}
+                </if>
+                <if test="dto.warehouseName != null and dto.warehouseName != '' ">
+                    AND wh.name LIKE CONCAT('%', #{dto.warehouseName}, '%')
+                </if>
+                <if test="dto.warehouseLot != null and dto.warehouseLot !='' ">
+                    AND oed.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+                </if>
+                <if test="dto.productName != null and dto.productName !='' ">
+                    AND prd.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+                </if>
+                <if test="dto.orderNum != null and dto.orderNum !='' ">
+                    AND xoeh.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+                </if>
+                <if test="dto.warehouseEnterNo != null and dto.warehouseEnterNo !='' ">
+                    AND xoeh.warehouse_enter_no LIKE CONCAT('%', #{dto.warehouseEnterNo}, '%')
+                </if>
+          </if>
+
+        ORDER BY xoeh.receipt_date DESC
+    </select>
+</mapper>

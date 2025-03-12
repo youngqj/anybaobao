@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.business.system.mapper.SysCodeRoleMapper">
+    <select id="getSysCodeRolebyType" parameterType="Integer"
+            resultType="com.interesting.business.system.entity.SysCodeRole">
+        select *
+        from sys_code_role
+        where type = #{type}
+    </select>
+</mapper>

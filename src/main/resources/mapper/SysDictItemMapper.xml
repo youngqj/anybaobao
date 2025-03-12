@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.business.system.mapper.SysDictItemMapper">
+
+    <select id="selectItemsByMainCode" resultType="com.interesting.business.system.entity.SysDictItem">
+        SELECT sys_dict_item.*
+        FROM sys_dict_item
+        left join sys_dict on sys_dict_item.dict_id = sys_dict.id
+        WHERE sys_dict.dict_code = #{code}
+        order by sys_dict_item.sort_order asc, sys_dict_item.item_value asc
+    </select>
+
+    <select id="selectMapItemsByMainCode" resultType="com.interesting.business.system.entity.SysDictItem">
+        SELECT sys_dict_item.*
+        FROM sys_dict_item
+        left join sys_dict on sys_dict_item.dict_id = sys_dict.id
+        WHERE sys_dict.dict_code = #{code}
+        order by sys_dict_item.sort_order asc, sys_dict_item.item_value asc
+    </select>
+</mapper>

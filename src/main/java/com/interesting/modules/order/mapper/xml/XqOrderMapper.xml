@@ -1,0 +1,2652 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.order.mapper.XqOrderMapper">
+
+
+
+
+    <select id="pageList" resultType="com.interesting.modules.order.vo.XqOrderVO">
+        with rt as (SELECT count(i.order_id),i.outstanding_remittance_ratio, i.order_id FROM xq_remittance_detail i
+        where i.iz_delete =0 and i.order_num = '' and i.remittance_date is not null GROUP BY i.order_id
+        ORDER BY
+        i.order_id DESC
+        ),
+        rt1 as (SELECT count(i.order_id),i.outstanding_remittance_ratio, i.order_id,i.order_num FROM
+        xq_remittance_detail i
+        where i.iz_delete =0 and i.order_num != '' and i.remittance_date is not null GROUP BY i.order_id,i.order_num
+        HAVING i.outstanding_remittance_ratio > 0 and i.outstanding_remittance_ratio &lt; 100
+        ORDER BY
+        i.order_id DESC ,
+        i.create_time asc
+        ),
+        rrt AS ( SELECT order_id, remittance_expire_date FROM xq_remittance_expire ),
+        rrrt AS (
+        SELECT
+        order_id,
+        COUNT(*) AS full_payment_count
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        AND finance_complete_state = 1
+        GROUP BY
+        order_id
+        ),
+        rrrrt AS (
+        SELECT
+        ord.order_num,
+        GROUP_CONCAT( DISTINCT xoed.customer_order_num ) AS customer_order_num
+        FROM
+        xq_order ord
+        LEFT JOIN xq_overseas_exit_detail xoed ON xoed.source_rep_num = ord.order_num
+        AND xoed.iz_delete = 0
+        INNER JOIN xq_overseas_exit_head xoeh ON xoeh.id = xoed.source_id
+        AND xoeh.iz_delete = 0
+        AND xoeh.audit_status = '1'
+        GROUP BY
+        ord.order_num
+        )
+
+        select * from (
+        SELECT ord.id,
+        ord.order_type AS orderType,
+        wt.item_text AS orderTypeTxt,
+        ord.customer_id AS customerId,
+        ord.origin_order_num,
+        cus.name AS customer,
+        ord.order_num AS orderNum,
+        GROUP_CONCAT(DISTINCT CONCAT_WS(' ',xpd.product_name) SEPARATOR ',') as productInfo,
+        GROUP_CONCAT(DISTINCT CONCAT_WS(' ',xp.name) SEPARATOR ',') as suppierName,
+        xfi.etd,
+        ord.shipping_date_required AS shippingDateRequired,
+        ord.quality_control_person,
+        ord.order_follow_up_person,
+        ord.delivery_date_required AS deliveryDateRequired,
+        ord.follower_audit AS followerAudit,
+        ord.create_time,
+        ord.invoice_num,
+        ord.create_by,
+        ord.actual_delivery_date,
+        xfi.bill_of_lading,
+        xfi.container_no,
+        GROUP_CONCAT( DISTINCT rrrrt.customer_order_num ) AS customer_order_num,
+        ord.repeat_audit,
+        ord.transfer_by,
+        IF(ord.order_type=1,ifnull(ck.final_remmitStatus,1),(
+            case
+            when
+            rt.outstanding_remittance_ratio &lt;= 0.00 or rt1.outstanding_remittance_ratio &lt;= 0.00
+            then 3
+            when
+            rt.outstanding_remittance_ratio = 100.00 or rt1.outstanding_remittance_ratio = 100.00
+            then 1
+            when
+            rt.outstanding_remittance_ratio BETWEEN 0.00 and 100.00 or rt1.outstanding_remittance_ratio BETWEEN 0.00 and
+            100.00
+            then 2
+            else 1
+            end
+        )) paymentStatus
+
+        -- CASE
+        -- WHEN (
+        -- -- Check if all raw records have a payment total of 0 or no raw records exist for the order
+        -- (SELECT SUM(payment_amount) FROM xq_raw_material_purchase WHERE order_id = ord.id) = 0
+        -- OR NOT EXISTS (SELECT * FROM xq_raw_material_purchase WHERE order_id = ord.id)
+        -- ) THEN 1
+        -- WHEN (
+        -- -- Check if all raw records have a full payment state of 1
+        -- (SELECT COUNT(*) FROM xq_raw_material_purchase WHERE order_id = ord.id AND finance_complete_state = 1) =
+        -- rrrt.full_payment_count
+        -- ) OR (
+        -- -- Check if purchase amount - payment amount is 0 and purchase amount is greater than 0
+        -- (SELECT SUM(purchase_amount) FROM xq_raw_material_purchase WHERE order_id = ord.id) - (SELECT
+        -- SUM(payment_amount) FROM xq_raw_material_purchase WHERE order_id = ord.id) = 0
+        -- AND (SELECT SUM(purchase_amount) FROM xq_raw_material_purchase WHERE order_id = ord.id) > 0
+        -- ) THEN 3
+        -- ELSE 2
+        -- END AS payStatus
+
+
+        FROM xq_order ord
+        <!-- 客户表 -->
+        LEFT JOIN xq_customer cus ON ord.customer_id = cus.id AND cus.iz_delete = 0
+        left join xq_order_detail xod on ord.id=xod.order_id and xod.iz_delete=0
+        left join xq_product_info xpd on xod.product_id=xpd.id and xpd.iz_delete=0
+        left join xq_freight_info xfi on xfi.order_id=ord.id and xfi.iz_delete=0
+        left join xq_raw_material_purchase xrmp on xrmp.order_id= ord.id and xrmp.iz_delete=0
+        left join xq_supplier xp on xrmp.supplier_id= xp.id and xp.iz_delete=0
+        left join rt on rt.order_id=ord.id
+        left join rt1 on rt1.order_id=ord.id
+        LEFT JOIN rrt ON rrt.order_id = ord.id
+        LEFT JOIN rrrt ON rrrt.order_id = ord.id
+        LEFT JOIN rrrrt ON rrrrt.order_num = ord.order_num
+        LEFT JOIN (
+            SELECT
+            source_rep_num,
+            CASE
+            WHEN MIN(remmitStatus) = 3 THEN 3
+            WHEN MAX(remmitStatus) = 1 THEN 1
+            ELSE 2
+            END AS final_remmitStatus
+            FROM (
+            SELECT
+            oed.source_rep_num,
+            CASE
+            WHEN sum(oed.exit_money) - IFNULL(rt.totalRemitAmount, 0) + (
+            -- 加额外费用
+            SELECT
+            IFNULL(SUM(oec.price),0)
+            FROM
+            xq_order_extra_cost oec
+            LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`
+
+            WHERE oec.iz_delete = 0
+            AND xo.order_num = oed.source_rep_num   AND oec.`customer_order_num` = oed.customer_order_num
+            )   - (
+        -- 订单扣除
+
+        SELECT
+        IFNULL(SUM(cms.amount),0) amount
+
+        FROM xq_order_commission cms
+        LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`
+
+        WHERE cms.iz_delete = 0
+
+        AND xo.order_num = oed.source_rep_num  AND cms.`customer_order_num` = oed.customer_order_num
+        AND cms.commission_type = 'ddkc'
+
+        ) &lt;= 0 THEN 3
+            WHEN sum(oed.exit_money) - IFNULL(rt.totalRemitAmount, 0) + (
+            -- 加额外费用
+            SELECT
+            IFNULL(SUM(oec.price),0)
+            FROM
+            xq_order_extra_cost oec
+            LEFT JOIN xq_order xo ON xo.`id` = oec.`order_id`
+
+            WHERE oec.iz_delete = 0
+            AND xo.order_num = oed.source_rep_num  AND oec.`customer_order_num` = oed.customer_order_num
+            )   - (
+        -- 订单扣除
+
+            SELECT
+            IFNULL(SUM(cms.amount),0) amount
+
+            FROM xq_order_commission cms
+            LEFT JOIN xq_order xo ON xo.`id` = cms.`order_id`
+
+            WHERE cms.iz_delete = 0
+
+            AND xo.order_num = oed.source_rep_num  AND cms.`customer_order_num` = oed.customer_order_num
+            AND cms.commission_type = 'ddkc'
+
+        ) = oed.exit_money THEN 1
+            ELSE 2
+            END AS remmitStatus
+            FROM
+            xq_overseas_exit_detail oed
+            LEFT JOIN (
+            SELECT
+            i.order_num AS order_num,
+            xo.order_Num AS source_rep_num,
+            SUM(i.remittance_amount + i.service_charge + i.factoring_interest + i.factoring_money + i.quality + i.discount) AS totalRemitAmount
+            FROM
+            xq_remittance_detail i
+            LEFT JOIN
+            xq_order xo ON xo.id = i.order_id
+            WHERE
+            i.iz_delete = 0 AND i.order_num != ''
+            GROUP BY
+            i.order_num, xo.order_Num
+            ) rt ON TRIM(oed.customer_order_num) = TRIM(rt.order_num) AND TRIM(oed.source_rep_num) = TRIM(rt.source_rep_num)
+            WHERE
+            oed.iz_delete = 0
+            group by
+            oed.customer_order_num, oed.source_rep_num
+            ) AS subquery
+            GROUP BY
+            source_rep_num
+
+        ) ck ON ck.source_rep_num = ord.order_num
+
+        <!-- 字典 -->
+        <!-- 订单类型 -->
+        LEFT JOIN sys_dict_item wt ON wt.item_value = ord.order_type AND wt.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'order_type' AND iz_delete = 0) AND wt.iz_delete = 0
+        <!--&lt;!&ndash; 跟单审核 &ndash;&gt;-->
+        <!--LEFT JOIN sys_dict_item fa ON fa.item_value = ord.follower_audit AND fa.dict_id = (SELECT id FROM sys_dict-->
+        <!--WHERE dict_code = 'audit_status' AND iz_delete = 0) AND fa.iz_delete = 0-->
+        <!--&lt;!&ndash; 财务审核 &ndash;&gt;-->
+        <!--LEFT JOIN sys_dict_item fia ON fia.item_value = ord.follower_audit AND fia.dict_id = (SELECT id FROM sys_dict-->
+        <!--WHERE dict_code = 'audit_status' AND iz_delete = 0) AND fia.iz_delete = 0-->
+
+        WHERE ord.iz_delete = 0
+        <if test="dto != null">
+            <if test="dto.followerAudit != null">
+                AND ord.follower_audit = #{dto.followerAudit}
+            </if>
+            <if test="dto.repeatAudit != null">
+                AND ord.repeat_audit = #{dto.repeatAudit}
+            </if>
+
+            <if test="dto.orderType != null">
+                AND ord.order_type = #{dto.orderType}
+            </if>
+            <if test="dto.etdStart != null">
+                AND xfi.etd &gt;= #{dto.etdStart}
+            </if>
+            <if test="dto.etdEnd != null">
+                AND xfi.etd &lt;= #{dto.etdEnd}
+            </if>
+            <if test="dto.orderNum">
+                AND (ord.order_num LIKE CONCAT('%', trim(#{dto.orderNum}), '%') or ord.origin_order_num LIKE CONCAT('%',
+                trim(#{dto.orderNum}), '%'))
+            </if>
+            <if test="dto.orderFollowUpPerson != null and dto.orderFollowUpPerson != ''">
+                AND ord.order_follow_up_person LIKE CONCAT('%', trim(#{dto.orderFollowUpPerson}), '%')
+            </if>
+            <if test="dto.shippingDateRequiredBegin != null">
+                AND ord.shipping_date_required &gt;= #{dto.shippingDateRequiredBegin}
+            </if>
+            <if test="dto.shippingDateRequiredEnd !=null">
+                AND ord.shipping_date_required &lt;= #{dto.shippingDateRequiredEnd}
+            </if>
+            <if test="dto.deliveryDateRequiredBegin !=null">
+                AND ord.actual_delivery_date &gt;= #{dto.deliveryDateRequiredBegin}
+            </if>
+            <if test="dto.deliveryDateRequiredEnd !=null">
+                AND ord.actual_delivery_date &lt;= #{dto.deliveryDateRequiredEnd}
+            </if>
+            <if test="dto.expireDateStart !=null">
+                AND rrt.remittance_expire_date &gt;= #{dto.expireDateStart}
+            </if>
+            <if test="dto.expireDateEnd !=null">
+                AND rrt.remittance_expire_date &lt;= #{dto.expireDateEnd}
+            </if>
+            <if test="dto.customer !=null and dto.customer != ''">
+                AND (cus.name LIKE CONCAT('%', trim(#{dto.customer}), '%') or cus.abbr LIKE CONCAT('%',
+                trim(#{dto.customer}), '%')
+                )
+            </if>
+            <if test="dto.billOfLading !=null and dto.billOfLading != ''">
+                AND xfi.bill_of_lading LIKE CONCAT('%', trim(#{dto.billOfLading}), '%')
+            </if>
+            <if test="dto.containerNo !=null and dto.containerNo != ''">
+                AND xfi.container_no LIKE CONCAT('%', trim(#{dto.containerNo}), '%')
+            </if>
+        </if>
+        group by ord.id
+        <if test="sortOrder != null">
+            ORDER BY ${sortOrder}
+        </if>
+        ) zzz
+        where 1=1
+        <if test="dto.productInfo !=null and dto.productInfo != ''">
+            AND zzz.productInfo LIKE CONCAT('%',trim(#{dto.productInfo}), '%')
+        </if>
+        <if test="dto.paymentStatus != null">
+            AND zzz.paymentStatus=#{dto.paymentStatus}
+        </if>
+        <if test="dto.customerOrderNum !=null and dto.customerOrderNum != ''">
+            and zzz.customer_order_num LIKE CONCAT('%', trim(#{dto.customerOrderNum}), '%')
+        </if>
+
+        <!--<if test="dto.payStatus != null">-->
+        <!--AND zzz.payStatus=#{dto.payStatus}-->
+        <!--</if>-->
+
+    </select>
+    <select id="getOrderHead" resultType="com.interesting.modules.order.vo.XqOrderAllVO">
+        SELECT o.id,
+               o.shipping_num,
+               o.order_type,
+               odtp.item_text AS order_type_txt,
+               o.customer_id,
+               c.name AS customer,
+               o.warehouse_id,
+               o.exchange_rate,
+               o.order_num,
+               o.origin_order_num,
+               o.invoice_num,
+               o.invoice_date,
+        xopm.text as payment_method_name,
+        o.payment_method as payment_method,
+               o.shipping_date_required,
+               o.delivery_address,
+               o.delivery_address_id,
+               o.overseas_receiver,
+               o.domestic_sender,
+               o.special_requirements,
+               o.delivery_date_required,
+               o.delivery_booking_num,
+               o.quality_control_person,
+               o.order_follow_up_person,
+               o.actual_delivery_date,
+               o.quality_issue_description,
+               o.production_date,
+               o.masked_content,
+               o.order_quality_remark,
+               o.raw_quality_remark,
+               o.remittance_remark,
+               o.remark,
+               o.remittance_expire_date,
+               o.follower_audit,
+               o.repeat_audit,
+               o.create_by,
+        o.transfer_by,
+        o.travel_fee
+
+        FROM xq_order o
+        <!-- 字典查order_type -->
+        LEFT JOIN sys_dict_item odtp ON odtp.item_value = o.order_type AND odtp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'order_type' AND iz_delete = 0) AND odtp.iz_delete = 0
+        <!-- 客户表 -->
+        LEFT JOIN xq_customer c ON c.id = o.customer_id AND c.iz_delete = 0
+        LEFT JOIN xq_order_payment_method xopm on xopm.id=o.payment_method
+
+
+
+        WHERE o.iz_delete = 0
+          AND o.id = #{id}
+
+
+    </select>
+    <select id="listOrderProds" resultType="com.interesting.modules.order.vo.sub.XqOrderProdVO">
+        SELECT dt.id,
+               dt.order_id,
+               dt.product_id,
+               prd.product_name,
+        prd.product_category as product_category_name,
+        xpc.category as trueProductCategoryName,
+        prd.product_name_en,
+        prd.product_grade,
+        prd.hs_code_domestic,
+        prd.hs_code_foreign,
+        prd.foreign_tariff,
+        prd.packaging,
+        prd.packaging_unit,
+               ut.name AS packagingUnitTxt,
+               dt.weight_per_box,
+               dt.weight_per_box_unit,
+               ut2.name AS weightPerBoxUnitTxt,
+               dt.total_boxes,
+               dt.total_weight,
+               dt.price_per_box,
+               dt.price_per_lb,
+               dt.sales_amount,
+               dt.special_notes,
+        dt.detail_exchange_rate,
+               dt.currency,
+        dt.layout_requirements,
+        prd.product_specs
+
+        FROM xq_order_detail dt
+        <!-- 产品信息表 -->
+        LEFT JOIN xq_product_info prd ON prd.id = dt.product_id AND prd.iz_delete = 0
+        <!-- 单位表 -->
+        LEFT JOIN xq_unit ut ON ut.id = dt.packaging_unit AND ut.iz_delete = 0
+        LEFT JOIN xq_unit ut2 ON ut2.id = dt.weight_per_box_unit AND ut2.iz_delete = 0
+        left join xq_product_category xpc on dt.product_category=xpc.id
+
+
+        WHERE dt.iz_delete = 0
+          AND dt.order_id = #{id}
+    </select>
+    <select id="listOrderComs" resultType="com.interesting.modules.order.vo.sub.XqOrderComsVO">
+        SELECT cms.id,
+               cms.order_id,
+               cms.company_name,
+               cms.requirements,
+               req.item_text AS requirementsTxt,
+               cms.percentage,
+               cms.amount,
+               cms.application_date,
+        cms.finance_confirmed_amount,
+        cms.finance_audit_date,
+               cms.notes,
+               cms.commission_type,
+               ftp.item_text AS commissionTypeTxt,
+               cms.param,
+               cms.customer_order_num
+
+        FROM xq_order_commission cms
+        <!-- 字典查 commission_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = cms.commission_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'commission_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        <!-- 字典查 commission_type -->
+        LEFT JOIN sys_dict_item req ON req.item_value = cms.requirements AND req.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'commission_require' AND iz_delete = 0) AND req.iz_delete = 0
+
+        WHERE cms.iz_delete = 0
+          AND cms.order_id = #{id}
+    </select>
+    <select id="listOrderRemi" resultType="com.interesting.modules.order.vo.sub.XqOrderRemiVO">
+        SELECT remi.id,
+               remi.order_id,
+               remi.remittance_date,
+               remi.remittance_amount,
+               remi.service_charge,
+               remi.factoring_interest,
+               remi.quality,
+               remi.discount,
+               remi.outstanding_receivables,
+               remi.outstanding_remittance_ratio,
+               remi.remarks,
+               remi.credit_insurance_premium,
+               remi.insurance_effective_date,
+               remi.factoring_money,
+               remi.order_num,
+               remi.credit_insurance_premium_convert,
+               remi.exchange_rate,
+               remi.currency
+
+        FROM xq_remittance_detail remi
+        WHERE remi.iz_delete = 0
+          AND remi.order_id = #{id}
+    </select>
+    <select id="listOrderRaw" resultType="com.interesting.modules.order.vo.sub.XqOrderRawVO">
+        SELECT raw.id,
+               raw.order_id,
+               raw.supplier_id,
+               s.name AS supplier,
+               raw.purchase_contract,
+        raw.agreement_no,
+               raw.product_id,
+               prd.product_name,
+               raw.weight,
+        raw.layout_requirements,
+               raw.weight_unit,
+               ut.name AS weightUnitTxt,
+               raw.currency,
+               raw.unit_price,
+        raw.real_unit_price,
+               raw.purchase_amount,
+               raw.tax_refund_rate,
+               raw.tax_refund_amount,
+               raw.purchase_note,
+               raw.payment_time,
+               raw.payment_amount,
+               raw.payment_status,
+               raw.financial_note,
+               raw.purchase_type,
+               ftp.item_text AS purchaseTypeTxt,
+               raw.category_id,
+               GROUP_CONCAT(DISTINCT act.name) AS categoryTxt,
+               raw.finance_complete_state,
+        raw.payment_expire_date,
+        raw.first_payment,
+        raw.last_payment,
+        raw.first_payment_rate,
+        raw.un_payment_amount,
+        raw.purchase_amount_cny,
+        raw.first_payment_expire_date,
+        raw.inspection_note
+
+        FROM xq_raw_material_purchase raw
+        <!-- 供应商 -->
+        LEFT JOIN xq_supplier s ON s.id = raw.supplier_id AND s.iz_delete = 0
+        <!-- 产品信息表 -->
+        LEFT JOIN xq_product_info prd ON prd.id = raw.product_id AND prd.iz_delete = 0
+        <!-- 字典查 purchase_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = raw.purchase_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'purchase_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        <!-- 单位表 -->
+        LEFT JOIN xq_unit ut ON ut.id = raw.weight_unit AND ut.iz_delete = 0
+        <!-- 辅料分类表 -->
+        LEFT JOIN xq_accessory_category act ON FIND_IN_SET(act.id, raw.category_id) AND act.iz_delete = 0
+
+        WHERE raw.iz_delete = 0
+        AND raw.order_id = #{id}
+
+        GROUP BY raw.id, raw.sort_num
+
+        ORDER BY raw.sort_num ASC
+    </select>
+
+
+    <select id="listOrderComsDetail" resultType="com.interesting.modules.orderdetail.vo.XqCommissionOrderVO">
+        SELECT
+        xcd.order_detail_id,
+        xcd.id,
+        xcd.commission_id,
+        xpi.id as product_id,
+        xpc.category as productCategory,
+        xpi.product_name,
+        xpi.product_name_en,
+        xod.layout_requirements,
+        xpi.product_specs,
+        xpi.product_grade,
+        xpi.packaging,
+        xu.`name` as packagingUnit,
+        xcd.commission_price
+        FROM
+        xq_commission_distribution xcd
+        LEFT JOIN xq_order_detail xod ON xcd.order_detail_id = xod.id
+        LEFT JOIN xq_product_info xpi ON xpi.id = xod.product_id
+        LEFT JOIN xq_product_category xpc ON xpi.product_category = xpc.id
+        LEFT JOIN xq_unit xu ON xpi.packaging_unit = xu.id
+        where 1=1
+        <if test="id != null and id != ''">
+            AND xcd.commission_id=#{id}
+        </if>
+        and xcd.iz_delete=0
+        ORDER BY
+        xod.id ASC
+
+    </select>
+
+
+    <!--<select id="listOrderRawFinance" resultType="com.interesting.modules.order.vo.sub.XqOrderRawFinanceVO">-->
+    <!--SELECT raw.id,-->
+    <!--s.name AS supplier,-->
+    <!--raw.purchase_contract,-->
+    <!--prd.product_name,-->
+    <!--raw.purchase_amount,-->
+    <!--raw.purchase_note,-->
+    <!--raw.payment_time,-->
+    <!--raw.payment_amount,-->
+    <!--raw.payment_status,-->
+    <!--raw.financial_note,-->
+    <!--raw.purchase_type,-->
+    <!--ftp.item_text AS purchaseTypeTxt,-->
+    <!--raw.category_id,-->
+    <!--GROUP_CONCAT(DISTINCT act.name) AS categoryTxt,-->
+    <!--raw.finance_complete_state-->
+
+    <!--FROM xq_raw_material_purchase raw-->
+    <!--&lt;!&ndash; 供应商 &ndash;&gt;-->
+    <!--LEFT JOIN xq_supplier s ON s.id = raw.supplier_id AND s.iz_delete = 0-->
+    <!--&lt;!&ndash; 产品信息表 &ndash;&gt;-->
+    <!--LEFT JOIN xq_product_info prd ON prd.id = raw.product_id AND prd.iz_delete = 0-->
+    <!--&lt;!&ndash; 字典查 purchase_type &ndash;&gt;-->
+    <!--LEFT JOIN sys_dict_item ftp ON ftp.item_value = raw.purchase_type AND ftp.dict_id = (SELECT id FROM sys_dict-->
+    <!--WHERE dict_code = 'purchase_type' AND iz_delete = 0) AND ftp.iz_delete = 0-->
+    <!--&lt;!&ndash; 单位表 &ndash;&gt;-->
+    <!--LEFT JOIN xq_unit ut ON ut.id = raw.weight_unit AND ut.iz_delete = 0-->
+    <!--&lt;!&ndash; 辅料分类表 &ndash;&gt;-->
+    <!--LEFT JOIN xq_accessory_category act ON FIND_IN_SET(act.id, raw.category_id) AND act.iz_delete = 0-->
+
+    <!--WHERE raw.iz_delete = 0-->
+    <!--AND raw.order_id = #{id}-->
+
+    <!--GROUP BY raw.id, raw.sort_num-->
+
+    <!--ORDER BY raw.sort_num ASC-->
+    <!--</select>-->
+    <select id="listOrderAcsr" resultType="com.interesting.modules.order.vo.sub.XqOrderAcsrVO">
+        SELECT acsr.id,
+               acsr.order_id,
+               acsr.product_id,
+               acsr.packaging,
+               acsr.layout_requirements,
+               acsr.supplier_id,
+               s.name AS supplier,
+               acsr.purchase_contract_no,
+               ac.accessory_name,
+               ac.size,
+               acsr.order_quantity,
+               acsr.unit_price,
+               acsr.purchase_amount,
+               acsr.tax_rate,
+               acsr.tax_included_amount,
+               acsr.purchase_note,
+               acsr.finance_audit_date,
+               acsr.finance_audit_amount,
+               acsr.currency,
+               ut.name AS packagingUnitTxt,
+               ut.id AS packagingUnit,
+               prd.product_name,
+               ac.category_id AS categoryId2,
+               ac.id AS accessoryId,
+               ac.material_specification,
+        ac.category_id AS categoryId2
+        -- xod.total_boxes
+
+        FROM xq_accessories_purchase acsr
+        <!-- 供应商 -->
+        LEFT JOIN xq_supplier s ON s.id = acsr.supplier_id AND s.iz_delete = 0
+        <!-- 辅料表 -->
+        LEFT JOIN xq_accessory_info ac ON ac.id = acsr.accessory_id AND ac.iz_delete = 0
+        <!-- 单位表 -->
+        LEFT JOIN xq_unit ut ON ut.id = acsr.packaging_unit AND ut.iz_delete = 0
+        <!-- 产品信息表 -->
+        LEFT JOIN xq_product_info prd ON prd.id = acsr.product_id AND prd.iz_delete = 0
+        -- left join xq_order_detail xod on xod.product_id=acsr.product_id and xod.order_id=acsr.order_id
+
+        WHERE acsr.iz_delete = 0
+          AND acsr.order_id = #{id}
+
+        ORDER BY acsr.sort_num ASC
+    </select>
+    <select id="listOrderFretCost"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+               fci.order_id,
+               fci.agent,
+               fci.remark,
+               fci.currency,
+               fci.price,
+               fci.application_time,
+               fci.finance_amount,
+               fci.finance_audit_time,
+               fci.fee_type,
+               ftp.item_text AS feeTypeTxt,
+               fci.iz_domestic
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+
+        WHERE fci.iz_delete = 0
+          AND fci.order_id = #{id}
+    </select>
+    <select id="listOrderFret" resultType="com.interesting.modules.order.vo.sub.XqOrderFretVO">
+        SELECT fin.id,
+               fin.order_id,
+               fin.ship_company,
+               fin.voyage_number,
+               fin.forwarder_company,
+               xfc.company_name forwarderCompanyName,
+               fin.forwarder_contact,
+               fin.etd,
+               fin.eta,
+               fin.bill_of_lading,
+               fin.container_no,
+               fin.seal_no,
+               fin.inspection_note,
+               sdi.item_text inspectionNoteName,
+               fin.inspection_submit_date,
+               fin.isf_receipt_time,
+               fin.pick_up_date,
+               fin.loading_date,
+               fin.arrival_date,
+               fin.foreign_air_return_date,
+               fin.loading_port,
+               fin.destination_port,
+               fin.net_weight,
+               fin.gross_weight,
+               fin.volume,
+               fin.container_temperature,
+               fin.`customs_clearance_time`,
+               fin.foreign_pick_time,
+               fin.export_declaration_num,
+               fin.return_cargo_time,
+               fin.arrive_port_time,
+               fin.return_ship_company,
+               fin.return_voyage_number,
+               fin.return_bill_of_lading,
+               fin.return_container_no,
+               fin.return_loading_port,
+               fin.return_destination_port,
+	           fin.return_net_weight,
+               fin.return_gross_weight,
+               fin.return_box_num
+
+        FROM xq_freight_info fin
+        left join xq_freight_company xfc on fin.forwarder_company = xfc.id
+        left join sys_dict sd on sd.dict_code = 'inspection_note_way' and sd.iz_delete = 0
+        left join sys_dict_item sdi on sd.id = sdi.dict_id and sdi.item_value = fin.inspection_note and sdi.iz_delete = 0
+        WHERE fin.iz_delete = 0
+          AND fin.order_id = #{id}
+    </select>
+    <select id="listOrderInsurance"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderInsuranceVO">
+        SELECT ins.id,
+               ins.order_id,
+               ins.insurance_company,
+               ins.insurance_fee,
+               ins.remark,
+               ins.application_date,
+               ins.finance_confirm_amount,
+               ins.finance_audit_date
+        FROM xq_insurance_expenses ins
+        WHERE ins.iz_delete = 0
+          AND ins.order_id = #{id}
+    </select>
+    <select id="listSupplierFretCost"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+               fci.supplier_id,
+               fci.agent,
+               fci.remark,
+               fci.currency,
+               fci.price,
+               fci.application_time,
+               fci.finance_amount,
+               fci.finance_audit_time,
+               fci.fee_type,
+               ftp.item_text AS feeTypeTxt,
+               fci.iz_domestic,
+               fci.iz_default_color
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+
+        WHERE fci.iz_delete = 0
+          AND fci.supplier_id = #{supplierId}
+         and fci.order_id is NULL
+    </select>
+
+    <select id="listSupplierFretOrderCost"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+        fci.supplier_id,
+        fci.agent,
+        fci.remark,
+        fci.currency,
+        fci.price,
+        fci.application_time,
+        fci.finance_amount,
+        fci.finance_audit_time,
+        fci.fee_type,
+        ftp.item_text AS feeTypeTxt,
+        fci.iz_domestic,
+        fci.iz_default_color
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+
+        WHERE fci.iz_delete = 0
+        AND fci.supplier_id = #{supplierId}
+        and fci.order_id =#{orderId}
+        and fci.iz_return_fee = 0
+    </select>
+    <select id="listCustomerFretCost"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+               fci.supplier_id,
+               fci.customer_id,
+               fci.agent,
+               fci.remark,
+               fci.currency,
+               fci.address,
+               fci.price,
+               fci.application_time,
+               fci.finance_amount,
+               fci.finance_audit_time,
+               fci.fee_type,
+               ftp.item_text AS feeTypeTxt,
+               fci.iz_domestic,
+               fci.iz_default_color
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+        WHERE fci.iz_delete = 0
+          AND fci.customer_id = #{customerId}
+          and fci.order_id is Null
+            <if test="orderId != null and '' != orderId">
+                AND (fci.`fee_type` NOT LIKE 'gwkcf%' OR fci.id = #{orderId})
+            </if>
+    </select>
+
+    <select id="listCustomerFretOrderCost"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.supplier_id,
+        fci.customer_id,
+        fci.agent,
+        fci.remark,
+        fci.currency,
+        fci.address,
+        fci.price,
+        fci.application_time,
+        fci.finance_amount,
+        fci.finance_audit_time,
+        fci.fee_type,
+        ftp.item_text AS feeTypeTxt,
+        fci.iz_domestic,
+        fci.iz_default_color
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+        WHERE fci.iz_delete = 0
+        AND fci.customer_id = #{customerId}
+        and fci.order_id =#{orderId}
+    </select>
+    <select id="listOrderFretCostWithType"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+               fci.order_id,
+               fci.agent,
+               fci.remark,
+               fci.currency,
+               fci.price,
+               fci.application_time,
+               fci.finance_amount,
+               fci.finance_audit_time,
+               fci.fee_type,
+               ftp.item_text AS feeTypeTxt,
+               fci.iz_domestic,
+               fci.files_url,
+               fci.iz_default_color
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+
+        WHERE fci.iz_delete = 0
+          AND fci.order_id = #{id}
+          AND fci.iz_domestic = #{type}
+          AND fci.iz_return_fee = 0
+    </select>
+    <select id="listOrderComsByCustomer"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderComsVO">
+        SELECT id     AS companyId,
+               `name` AS companyName,
+               requirements,
+               percentage
+
+        FROM xq_commission_company cpn
+        WHERE cpn.iz_delete = 0
+          AND cpn.customer_id = #{customerId}
+        ORDER BY create_time ASC
+    </select>
+    <select id="listOrderFiles" resultType="com.interesting.modules.files.vo.ListXqFileVO">
+        SELECT xq_files.id,
+               xq_files.order_id,
+               xq_files.module_type,
+               xq_files.file_url,
+               xq_files.file_name,
+               xq_files.file_type,
+               xq_files.file_size,
+               xq_files.create_by,
+               xq_files.create_time,
+               xq_files.file_uid
+
+        FROM xq_files
+        WHERE xq_files.iz_delete = 0
+          AND xq_files.order_id = #{id}
+        ORDER BY create_time DESC
+    </select>
+    <select id="listProblemNotes" resultType="com.interesting.modules.notes.vo.XqProblemNoteVO">
+        SELECT id,
+               module_type,
+               order_id,
+               note,
+               create_by,
+               create_time,
+               update_by,
+               update_time,
+               iz_delete
+        FROM xq_problem_note note
+        WHERE note.iz_delete = 0
+          AND note.order_id = #{id}
+        ORDER BY create_time ASC
+    </select>
+    <select id="listPaymentDetails"
+            resultType="com.interesting.modules.rawmaterial.vo.XqPaymentDetailVO">
+        SELECT pd.id,
+               pd.source_id,
+               pd.pay_money,
+               pd.pay_time,
+               pd.pay_remark,
+               pd.create_by,
+               pd.create_time,
+               pd.update_by,
+               pd.type,
+               pd.update_time,
+               pd.iz_delete,
+               pd.prepayments_id
+        FROM xq_payment_detail pd
+        WHERE pd.iz_delete = 0
+          AND pd.source_id = #{id}
+          and pd.type=0
+        ORDER BY pd.create_time ASC
+    </select>
+
+    <select id="listCutAmountDetails"
+            resultType="com.interesting.modules.rawmaterial.vo.XqCutAmountDetailVO">
+        SELECT pd.id,
+               pd.source_id,
+               pd.pay_money as  cut_amount,
+               pd.pay_time,
+               pd.pay_remark,
+               pd.create_by,
+               pd.create_time,
+               pd.update_by,
+               pd.type,
+               pd.update_time,
+               pd.iz_delete
+        FROM xq_payment_detail pd
+        WHERE pd.iz_delete = 0
+          AND pd.source_id = #{id}
+           and pd.type=1
+        ORDER BY pd.create_time ASC
+    </select>
+    <select id="listUseOrderAcsrDetails"
+            resultType="com.interesting.modules.accmaterial.vo.AccInventoryDetailsVO">
+        SELECT ivet.id,
+               apu.unit_price,
+               ivet.num,
+               ivet.item_id,
+               ivet.warehouse_id,
+               wh.name AS warehouseName,
+               ivet.relative_time,
+               ivet.source_rep_num,
+               ivet.currency
+
+        FROM xq_inventory ivet
+
+                 LEFT JOIN xq_warehouse wh ON wh.id = ivet.warehouse_id AND wh.iz_delete = 0
+                 LEFT JOIN xq_accessories_purchase apu ON apu.id = ivet.source_id AND apu.iz_delete = 0
+
+
+        WHERE ivet.iz_delete = 0
+          AND ivet.source_id = #{id}
+          AND ivet.direction = '2'
+        ORDER BY ivet.create_time ASC
+
+    </select>
+    <select id="listBackOrderAcsrDetails"
+            resultType="com.interesting.modules.accmaterial.vo.AccInventoryDetailsVO">
+        SELECT ivet.id,
+               ivet.num,
+               ivet.item_id,
+               ivet.warehouse_id,
+               wh.name AS warehouseName,
+               ivet.relative_time,
+               ivet.source_rep_num
+
+        FROM xq_inventory ivet
+        <!-- 仓库 -->
+        LEFT JOIN xq_warehouse wh ON wh.id = ivet.warehouse_id AND wh.iz_delete = 0
+
+        WHERE ivet.iz_delete = 0
+          AND ivet.source_id = #{id}
+          AND ivet.direction = '1'
+        ORDER BY ivet.create_time ASC
+    </select>
+    <select id="pageRelativeOrder"
+            resultType="com.interesting.modules.overseas.vo.RelativeOrderPageVO">
+        SELECT
+            o.id,
+            o.customer_id,
+            o.order_num,
+            cus.name AS customerName,
+            SUM(od.sales_amount) AS totalMoney,
+            GROUP_CONCAT(prd.product_name) AS productInfo,
+            o.create_time,
+            o.create_by,
+            o.enter_state,
+            wt.item_text AS enterStateTxt,
+            o.exit_state,
+            wt2.item_text AS exitStateTxt
+
+        FROM xq_order o
+        LEFT JOIN xq_order_detail od ON od.order_id = o.id AND od.iz_delete = 0
+        LEFT JOIN xq_customer cus ON cus.id = o.customer_id AND cus.iz_delete = 0
+        LEFT JOIN xq_product_info prd ON prd.id = od.product_id AND prd.iz_delete = 0
+
+        LEFT JOIN sys_dict_item wt ON wt.item_value = o.enter_state AND wt.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'finish_state' AND iz_delete = 0) AND wt.iz_delete = 0
+        LEFT JOIN sys_dict_item wt2 ON wt2.item_value = o.exit_state AND wt2.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'finish_state' AND iz_delete = 0) AND wt2.iz_delete = 0
+
+        WHERE o.iz_delete = 0
+        AND o.`order_type` = 1
+        <if test="dto.enterState != null and dto.enterState != '' and dto.enterState == 2">
+            AND o.enter_state != '2'
+        </if>
+        <if test="dto.exitState != null and dto.exitState != '' and dto.exitState == 2">
+            AND o.exit_state != '2'
+        </if>
+        <if test="dto.orderNum != null and dto.orderNum != ''">
+            AND o.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+        </if>
+        <if test="dto.customerName != null and dto.customerName != ''">
+            AND cus.name LIKE CONCAT('%', #{dto.customerName}, '%')
+        </if>
+
+        GROUP BY o.id
+        <if test="dto.productInfo != null and dto.productInfo != ''">
+            HAVING productInfo LIKE CONCAT('%', #{dto.productInfo}, '%')
+        </if>
+    </select>
+    <select id="listTruckInfo" resultType="com.interesting.modules.truck.vo.XqTruckInfoVO">
+        SELECT trk.id,
+               trk.truck_company,
+               trk.truck_fee,
+               trk.remark,
+               trk.finance_amount,
+               trk.finance_audit_time,
+               trk.apply_date,
+               trk.pay_date,
+               trk.create_by,
+               trk.create_time,
+               trk.customer_order_num,
+               delivery_time,
+               delivery_warehouse,
+               arrival_time,
+               arrival_warehouse,
+               customer_name
+
+        FROM xq_truck_info trk
+        WHERE trk.iz_delete = 0
+          AND trk.order_id = #{id}
+
+    </select>
+    <select id="listFretCostReturnFee"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+               fci.order_id,
+               fci.product_id,
+               fci.layout_requirements,
+               fci.agent,
+               fci.remark,
+               fci.currency,
+               fci.price,
+               fci.pay_time,
+               fci.application_time,
+               fci.files_url,
+               fci.finance_amount,
+               fci.finance_audit_time,
+               fci.fee_type,
+               ftp.item_text AS feeTypeTxt
+
+        FROM xq_freight_cost_info fci
+                 LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id
+                                                                                                 FROM sys_dict
+                                                                                                 WHERE dict_code = 'fee_type'
+                                                                                                   AND iz_delete = 0) AND
+                                                ftp.iz_delete = 0
+        WHERE fci.iz_delete = 0
+          AND fci.iz_return_fee = 1
+          AND fci.order_id = #{id}
+    </select>
+    <select id="listRemiExpDateVOS"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderRemiExpDateVO">
+        SELECT ree.id,
+               ree.order_id,
+               ree.price,
+               ree.remittance_expire_date,
+               ree.remark
+        FROM xq_remittance_expire ree
+        WHERE ree.iz_delete = 0
+          AND ree.order_id = #{id}
+    </select>
+    <select id="pageSellProfit" resultType="com.interesting.modules.reportform.vo.SellProfitPageVO">
+        SELECT
+        IFNULL( customer_id, '' ) AS `customer_id`,
+        IFNULL( `exchange_rate`, '' ) AS exchange_rate,
+        IFNULL( DATE_FORMAT( etd, '%Y/%m/%d' ), '' ) AS `etd`,
+        IFNULL( `customerName`, '-' ) AS customerName,
+        IFNULL( `customerAbbr`, '-' ) AS customerAbbr,
+        IFNULL( `order_num`, '-' ) AS order_num,
+        IFNULL( order_detail_id,'-' ) AS order_detail_id,
+        IFNULL( `product_id`, '-' ) AS product_id,
+        IFNULL( `product_category`, '-' ) AS product_category,
+        IFNULL( `category`, '-' ) AS category,
+        IFNULL( `product_name`, '-' ) AS product_name,
+        IFNULL( Round ( `total_weight`, 2 ), 0.00 ) AS total_weight,
+        IFNULL( Round ( `tax_refund_rate`, 2 ), 0.00 ) AS tax_refund_rate,
+        IFNULL( Round ( `od_total_box`, 2 ), 0.00 ) AS od_total_box,
+        IFNULL( Round ( `all_box`, 2 ), 0.00 ) AS all_box,
+        IFNULL( Round ( `service_charge`, 2 ), 0.00 ) AS service_charge,
+        IFNULL( Round ( `totalServiceCharge`, 2 ), 0.00 ) AS totalServiceCharge,
+        IFNULL( Round ( `price_per_box`, 3 ), 0.00 ) AS price_per_box,
+        IFNULL( Round ( `sales_amount`, 2 ), 0.00 ) AS sales_amount,
+        IFNULL( Round ( `ratio`, 2 ), 0.00 ) AS ratio,
+        IFNULL( Round ( `real_unit_price`, 6 ), 0.00 ) AS unit_price,
+        IFNULL( Round ( `return_fee`, 2 ), 0.00 ) AS returnFee,
+        IFNULL( Round ( `weight`, 2 ), 0.00 ) AS weight,
+        IFNULL( Round ( purchase_amount, 2 ), 0.00 ) AS purchase_amount,
+        IFNULL( Round ( `customerCommission`, 2 ), 0.00 ) AS customerCommission,
+        IFNULL( Round ( `totalCustomerCommission`, 2 ), 0.00 ) AS totalCustomerCommission,
+        IFNULL( Round ( `thirdPartImportCommission`, 2 ), 0.00 ) AS thirdPartImportCommission,
+        IFNULL( Round ( `totalThirdPartImportCommission`, 2 ), 0.00 ) AS totalThirdPartImportCommission,
+        IFNULL( Round ( `middleManCommission`, 2 ), 0.00 ) AS middleManCommission,
+        IFNULL( Round ( `totalMiddleManCommission`, 2 ), 0.00 ) AS totalMiddleManCommission,
+        IFNULL( Round ( `qualityDeduction`, 2 ), 0.00 ) AS qualityDeduction,
+        IFNULL( Round ( `totalQualityDeduction`, 2 ), 0.00 ) AS totalQualityDeduction,
+        IFNULL( Round ( `discount`, 2 ), 0.00 ) AS discount,
+        IFNULL( Round ( `totalDiscount`, 2 ), 0.00 ) AS totalDiscount,
+        IFNULL( Round ( `creditInsurancePremium`, 2 ), 0.00 ) AS creditInsurancePremium,
+        IFNULL( Round ( `totalCreditInsurancePremium`, 2 ), 0.00 ) AS totalCreditInsurancePremium,
+        IFNULL( Round ( `factoringInterest`, 2 ), 0.00 ) AS factoringInterest,
+        IFNULL( Round ( `totalFactoringInterest`, 2 ), 0.00 ) AS totalFactoringInterest,
+        IFNULL( Round ( `accessoryPurchaseTotal`, 2 ), 0.00 ) AS accessoryPurchaseTotal,
+        IFNULL( Round ( `accessoryPurchaseTotal1`, 2 ), 0.00 ) AS accessoryPurchaseTotal1,
+        IFNULL( Round ( `accessoryPurchaseTotal2`, 2 ), 0.00 ) AS accessoryPurchaseTotal2,
+        IFNULL( Round ( `totalAccessoryPurchaseTotal`, 2 ), 0.00 ) AS totalAccessoryPurchaseTotal,
+        IFNULL( Round ( `totalAccessoryPurchaseTotal1`, 2 ), 0.00 ) AS totalAccessoryPurchaseTotal1,
+        IFNULL( Round ( `totalAccessoryPurchaseTotal2`, 2 ), 0.00 ) AS totalAccessoryPurchaseTotal2,
+        IFNULL( Round ( `beforeDepartureTotal`, 2 ), 0.00 ) AS beforeDepartureTotal,
+        IFNULL( Round ( `totalBeforeDepartureTotal`, 2 ), 0.00 ) AS totalBeforeDepartureTotal,
+        IFNULL( Round ( `insuranceFee`, 2 ), 0.00 ) AS insuranceFee,
+        IFNULL( Round ( `totalInsuranceFee`, 2 ), 0.00 ) AS totalInsuranceFee,
+        IFNULL( Round ( `domesticShippingFee`, 2 ), 0.00 ) AS domesticShippingFee,
+        IFNULL( Round ( `totalDomesticShippingFee`, 2 ), 0.00 ) AS totalDomesticShippingFee,
+        IFNULL( Round ( `customsClearanceTaxFee`, 2 ), 0.00 ) AS customsClearanceTaxFee,
+        IFNULL( Round ( `totalCustomsClearanceTaxFee`, 2 ), 0.00 ) AS totalCustomsClearanceTaxFee,
+        IFNULL( Round ( `foreignCustomsClearanceFee`, 2 ), 0.00 ) AS foreignCustomsClearanceFee,
+        IFNULL( Round ( `totalForeignCustomsClearanceFee`, 2 ), 0.00 ) AS totalForeignCustomsClearanceFee,
+        IFNULL( Round ( `foreignTruckFee`, 2 ), 0.00 ) AS foreignTruckFee,
+        IFNULL( Round ( `totalForeignTruckFee`, 2 ), 0.00 ) AS totalForeignTruckFee,
+        IFNULL( Round ( `extraFee`, 2 ), 0.00 ) AS extraFee,
+        IFNULL( Round ( `totalExtraFee`, 2 ), 0.00 ) AS totalExtraFee,
+        IFNULL( Round ( `collectionAdditionalFees`, 2 ), 0.00 ) AS collectionAdditionalFees,
+        IFNULL( Round ( `totalCollectionAdditionalFees`, 2 ), 0.00 ) AS totalCollectionAdditionalFees,
+        IFNULL( Round ( `travelFee`, 2 ), 0.00 ) AS travelFee,
+        IFNULL( Round ( `totalTravelFee`, 2 ), 0.00 ) AS totalTravelFee,
+        IFNULL( Round ( `tax_refund_amount`, 2 ), 0.00 ) AS tax_refund_amount,
+        raw_currency as raw_currency,
+
+        record_count AS recordCount,
+        IFNULL( `supplierName`, '-' ) AS supplierName,
+        `supplier_id`,
+        cut_amount
+        FROM
+        (
+        WITH rt AS ( SELECT id, exchange_rate FROM xq_order WHERE iz_delete = 0 ),
+        t AS (
+        SELECT
+        o.customer_id,
+        o.order_type,
+        o.exchange_rate,
+        fi.etd,
+        fi.customs_clearance_time,
+        ( SELECT count( od.order_id ) FROM xq_order_detail od WHERE od.order_id = o.id and od.iz_delete=0 ) AS
+        record_count,
+        c.NAME AS customerName,
+        c.abbr AS customerAbbr,
+        o.order_num,
+        od.product_id,
+        od.id AS order_detail_id,
+        od.weight_per_box AS weight_per_box,
+        od.total_boxes AS od_total_box,
+        pd.product_name,
+        pd.product_category,
+        pc.category,
+        CASE
+
+        WHEN od.price_per_lb IS NULL THEN
+        od.total_boxes
+        WHEN od.price_per_lb = 0.00 THEN
+        od.total_boxes ELSE od.total_weight
+        END AS total_weight,
+        CASE
+
+        WHEN od.price_per_lb IS NULL THEN
+        IF
+        ( od.currency != 'USD', ( ( od.sales_amount / od.total_weight ) * od.detail_exchange_rate ), od.price_per_box )
+        WHEN od.price_per_lb = 0 THEN
+        IF
+        ( od.currency != 'USD', ( ( od.sales_amount / od.total_weight ) * od.detail_exchange_rate ), od.price_per_box )
+        ELSE
+        IF
+        ( od.currency != 'USD', ( od.price_per_lb * od.detail_exchange_rate ), od.price_per_lb )
+        END AS price_per_box,
+        -- 销售总额
+        CASE
+        WHEN od.currency = 'USD' THEN  od.sales_amount
+        WHEN od.currency = 'CNY' THEN  od.sales_amount / od.detail_exchange_rate
+        ELSE od.sales_amount * od.detail_exchange_rate END
+        AS sales_amount,
+        -- 销售总额
+        t.all_box,
+        round( rmp.weight / t.all_box, 2 ) AS ratio,
+        rmp.real_unit_price,
+        rmp.id as rmpId,
+        rmp.weight as weight,
+        rmp.purchase_amount,
+        rmp.old_purchase_amount,
+        rmp.currency as raw_currency,
+        rmp.tax_refund_rate AS tax_refund_rate,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'ddkc'
+        AND cc.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS customerCommission,
+        (SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'ddkc'
+        AND cc.order_id = o.id
+        ) AS totalCustomerCommission,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'sfyj'
+        AND cc.order_id = o.id
+        )* round( rmp.weight / t.all_box, 2 ) AS thirdPartImportCommission,
+
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'sfyj'
+        AND cc.order_id = o.id
+        ) AS totalThirdPartImportCommission,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'zjsyj'
+        AND cc.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS middleManCommission,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'zjsyj'
+        AND cc.order_id = o.id
+        ) AS totalMiddleManCommission,
+        ( SELECT SUM( rem.quality ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) *
+        round( rmp.weight / t.all_box, 2 ) AS qualityDeduction,
+        ( SELECT SUM( rem.quality ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) AS
+        totalQualityDeduction,
+
+        ( SELECT SUM( IF ( xfci.currency = 'CNY', IFNULL( Round ( xfci.price / o.exchange_rate, 2 ), 0.00 ), xfci.price ) ) FROM xq_freight_cost_info xfci WHERE xfci.iz_delete = 0
+        AND xfci.product_id = rmp.product_id and xfci.layout_requirements=rmp.layout_requirements and xfci.order_id=
+        o.id and xfci.iz_return_fee=1
+
+        ) AS return_fee,
+
+
+
+        IF ( t.record_count > 1,round(( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0
+        AND rem.order_id = o.id ) * round( rmp.weight / t.all_box, 2 ),2),
+        ( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id )) AS
+        discount,
+        ( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) AS
+        totalDiscount,
+        ( SELECT SUM( rem.credit_insurance_premium_convert ) FROM xq_credit_insurance rem WHERE rem.iz_delete = 0 AND
+        rem.order_id = o.id ) * round( rmp.weight / t.all_box, 2 ) AS creditInsurancePremium,
+        ( SELECT SUM( rem.credit_insurance_premium_convert ) FROM xq_credit_insurance rem WHERE rem.iz_delete = 0 AND
+        rem.order_id = o.id ) AS totalCreditInsurancePremium,
+        ( SELECT SUM( rem.factoring_interest ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id =
+        o.id ) * round( rmp.weight / t.all_box, 2 ) AS factoringInterest,
+        ( SELECT SUM( rem.factoring_interest ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id =
+        o.id ) AS totalFactoringInterest,
+        ( SELECT SUM( rem.service_charge ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS service_charge,
+        ( SELECT SUM( rem.service_charge ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id
+        ) AS totalServiceCharge,
+        ifnull( apu.tax_included_amount, 0 ) AS accessoryPurchaseTotal,
+        ifnull( apu1.tax_included_amount1 * round( rmp.weight / t.all_box, 2 ), 0 ) AS accessoryPurchaseTotal1,
+        ifnull( apu2.tax_included_amount2 * round( rmp.weight / t.all_box, 2 ), 0 ) AS accessoryPurchaseTotal2,
+
+        ifnull( apu.tax_included_amount, 0 ) AS totalAccessoryPurchaseTotal,
+        ifnull( apu1.tax_included_amount1, 0 ) AS totalAccessoryPurchaseTotal1,
+        ifnull( apu2.tax_included_amount2 , 0 ) AS totalAccessoryPurchaseTotal2,
+
+
+
+        -- 港前总费用
+        (
+        IF(rmp.currency != 'CNY',0,(
+        SELECT
+
+        SUM(CASE WHEN fci.currency != 'CNY' THEN fci.price ELSE 0 END) +
+        ROUND((SUM(CASE WHEN fci.currency = 'CNY' THEN fci.price ELSE 0 END) / o.exchange_rate),2)
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type != 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) * ROUND( rmp.weight /
+        -- 采购数量/总数量
+        (
+        SELECT
+        SUM(weight)
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        AND currency = 'CNY'
+        AND order_id = rmp.order_id
+        ), 2 )))
+        AS beforeDepartureTotal,
+
+
+        -- 港前总费用
+        tt.currency_record_count,
+        (
+            SELECT
+            SUM(CASE WHEN fci.currency != 'CNY' THEN fci.price ELSE 0 END) +
+            ROUND((SUM(CASE WHEN fci.currency = 'CNY' THEN fci.price ELSE 0 END) / o.exchange_rate),2)
+            FROM
+            xq_freight_cost_info fci
+            WHERE
+            fci.iz_delete = 0
+            AND fci.order_id = o.id
+            AND fci.fee_type != 'gnhyf'
+            AND fci.iz_domestic = 1
+        ) AS totalBeforeDepartureTotal,
+
+        CASE
+
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) >= 0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 200.00
+        ) * round( rmp.weight / t.all_box, 2 )
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) &lt;
+        0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 100.00
+        ) * round( rmp.weight / t.all_box, 2 ) ELSE 0
+        END AS insuranceFee,
+        CASE
+
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) >= 0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 200.00
+        )
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) &lt;
+        0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 100.00
+        ) ELSE 0
+        END AS totalInsuranceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) * round( rmp.weight / t.all_box, 2 ) AS domesticShippingFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) AS totalDomesticShippingFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'qggs'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS customsClearanceTaxFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'qggs'
+        AND fci.iz_domestic = 0
+        ) AS totalCustomsClearanceTaxFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwqgf'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS foreignCustomsClearanceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwqgf'
+        AND fci.iz_domestic = 0
+        ) AS totalForeignCustomsClearanceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type like 'gwkcf%'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS foreignTruckFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type like 'gwkcf%'
+        AND fci.iz_domestic = 0
+        ) AS totalForeignTruckFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type LIKE 'ewfy%'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS extraFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency = 'CNY', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type LIKE 'ewfy%'
+        AND fci.iz_domestic = 0
+        ) AS totalExtraFee,
+        ( o.travel_fee * round( rmp.weight / t.all_box, 2 ) ) AS travelFee,
+        o.travel_fee AS totalTravelFee,
+        -- 额外费用
+        (
+        SELECT
+            ROUND(
+                SUM(
+                CASE
+                WHEN oec.`currency` = 'USD' THEN oec.`price`
+                WHEN oec.`currency` = 'CNY' THEN oec.`price` / oec.exchange_rate
+                ELSE oec.`price` * oec.exchange_rate
+                END
+                ),
+                2
+            ) AS usd
+        FROM
+        xq_order_extra_cost oec
+        WHERE
+        oec.iz_delete = 0
+        AND oec.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS collectionAdditionalFees,
+        -- 额外费用
+        (
+        SELECT
+            ROUND(
+            SUM(
+                CASE
+                WHEN oec.`currency` = 'USD' THEN oec.`price`
+                WHEN oec.`currency` = 'CNY' THEN oec.`price` / oec.exchange_rate
+                ELSE oec.`price` * oec.exchange_rate
+                END
+            ),
+            2
+            ) AS usd
+        FROM
+        xq_order_extra_cost oec
+        WHERE
+        oec.iz_delete = 0
+        AND oec.order_id = o.id
+        ) AS totalCollectionAdditionalFees,
+        rmp.supplier_id,
+        sup.NAME AS supplierName,
+        t2.cut_amount
+        FROM
+        xq_order o
+        LEFT JOIN xq_customer c ON c.id = o.customer_id
+        AND c.iz_delete = 0
+        LEFT JOIN xq_order_detail od ON od.order_id = o.id
+        AND od.iz_delete = 0
+        LEFT JOIN xq_product_info pd ON pd.id = od.product_id
+        AND pd.iz_delete = 0
+        LEFT JOIN xq_product_category pc ON pd.product_category = pc.id
+        AND pd.iz_delete = 0
+
+
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.layout_requirements as layout_requirements,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id in ('1702556752196595713','1702556779962888194')
+        GROUP BY
+        apu.product_id,
+        apu.order_id,
+        apu.layout_requirements
+        ) apu ON apu.order_id = o.id
+        AND apu.product_id = pd.id
+        and apu.layout_requirements=od.layout_requirements
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount1,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id not in
+        ('1702556752196595713','1702556779962888194')
+        GROUP BY
+        apu.order_id
+        ) apu1 ON apu1.order_id = o.id
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount2,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id in ('1702556887416762369')
+        GROUP BY
+        apu.order_id
+        ) apu2 ON apu2.order_id = o.id
+        LEFT JOIN (
+        SELECT
+        order_id,
+        SUM( ifNull( weight, 0 ) ) AS all_box,
+        COUNT( * ) AS record_count
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        GROUP BY
+        order_id
+        ) t ON t.order_id = od.order_id
+        LEFT JOIN (
+        SELECT
+        mp.order_id,
+        mp.product_id,
+        SUM( if(mp.currency = 'USD', ifnull(mp.cut_amount, 0.00), ifnull(mp.cut_amount, 0.00) / ifnull(o.exchange_rate, 1)) ) AS cut_amount
+        FROM
+        xq_raw_material_purchase mp
+        left join xq_order o on o.id = mp.order_id
+        WHERE
+        mp.iz_delete = 0
+        GROUP BY
+        mp.order_id, mp.product_id
+        ) t2 ON t2.order_id = od.order_id and t2.product_id = od.product_id
+        LEFT JOIN (
+        SELECT
+        order_id,
+        COUNT( * ) AS currency_record_count
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        and currency='CNY'
+        GROUP BY
+        order_id
+        ) tt ON tt.order_id = od.order_id
+        LEFT JOIN (
+        SELECT
+        rmp.id,
+        rmp.order_id,
+        rmp.product_id,
+        rmp.layout_requirements,
+        rmp.currency,
+        rmp.supplier_id,
+        IF
+        ( rmp.currency = 'CNY', Round ( ( rmp.real_unit_price / rt.exchange_rate ),5 ) , rmp.real_unit_price ) AS
+        real_unit_price,
+        rmp.weight AS weight,
+        rmp.purchase_amount AS old_purchase_amount,
+
+        IF
+        ( rmp.currency = 'CNY', Round ( Round ( ( rmp.real_unit_price / rt.exchange_rate ),5 ) * rmp.weight ,2) ,
+        Round ( rmp.real_unit_price * rmp.weight ,2)
+        )AS
+        purchase_amount,
+        rmp.tax_refund_rate AS tax_refund_rate
+        FROM
+        xq_raw_material_purchase rmp
+        LEFT JOIN rt ON rt.id = rmp.order_id
+        WHERE
+        rmp.iz_delete = 0
+        GROUP BY
+        product_id,
+        layout_requirements,
+        order_id
+        ) rmp ON rmp.order_id = o.id
+        AND od.product_id = rmp.product_id and od.layout_requirements=rmp.layout_requirements
+        LEFT JOIN xq_supplier sup ON sup.id = rmp.supplier_id
+        AND sup.iz_delete = 0
+        LEFT JOIN xq_freight_info fi ON fi.order_id = o.id and fi.iz_delete=0
+        WHERE
+        o.iz_delete = 0
+        <if test="dto.orderId != null and dto.orderId != ''">
+            AND o.id = #{dto.orderId}
+        </if>
+
+        GROUP BY
+        od.id
+        ) SELECT
+        t.customer_id,
+        t.record_count,
+        t.totalTravelFee,
+        t.exchange_rate,
+        t.etd,
+        t.customs_clearance_time,
+        t.customerName,
+        t.customerAbbr,
+        t.order_num,
+        t.purchase_amount,
+        t.totalInsuranceFee,
+        t.order_type,
+        t.old_purchase_amount,
+        t.product_id,
+        t.product_category,
+        t.category,
+        t.order_detail_id,
+        t.product_name,
+        t.total_weight,
+        t.tax_refund_rate,
+        t.od_total_box,
+        t.totalCreditInsurancePremium,
+        t.all_box,
+        t.service_charge,
+        t.price_per_box,
+        t.raw_currency,
+        t.rmpId,
+        t.sales_amount,
+        t.return_fee,
+        t.ratio,
+        t.real_unit_price,
+        t.weight,
+        t.totalMiddleManCommission,
+        t.totalCustomerCommission,
+        t.totalthirdPartImportCommission,
+        t.totalQualityDeduction,
+        t.totalDiscount,
+        t.totalFactoringInterest,
+        t.totalDomesticShippingFee,
+        t.totalForeignTruckFee,
+        t.totalBeforeDepartureTotal,
+        t.totalServiceCharge as totalServiceCharge,
+        t.totalCustomsClearanceTaxFee,
+        t.totalForeignCustomsClearanceFee,
+        t.totalCollectionAdditionalFees,
+        t.totalExtraFee,
+        IFNULL( t.customerCommission, 0 ) AS customerCommission,
+        IFNULL(t.thirdPartImportCommission , 0 ) AS thirdPartImportCommission,
+        IFNULL( t.middleManCommission, 0 ) AS middleManCommission,
+        IFNULL( t.qualityDeduction, 0 ) AS qualityDeduction,
+        IFNULL( t.discount, 0 ) AS discount,
+        IFNULL( t.creditInsurancePremium, 0 ) AS creditInsurancePremium,
+        IFNULL( t.factoringInterest, 0 ) AS factoringInterest,
+        IFNULL( t.accessoryPurchaseTotal / t.exchange_rate, 0 ) AS accessoryPurchaseTotal,
+        IFNULL(t.accessoryPurchaseTotal1 / t.exchange_rate , 0 ) AS accessoryPurchaseTotal1,
+        IFNULL(t.accessoryPurchaseTotal2 / t.exchange_rate ,0 ) AS accessoryPurchaseTotal2,
+        IFNULL( t.totalAccessoryPurchaseTotal / t.exchange_rate, 0 ) AS totalAccessoryPurchaseTotal,
+        IFNULL(t.totalAccessoryPurchaseTotal1 / t.exchange_rate , 0 ) AS totalAccessoryPurchaseTotal1,
+        IFNULL(t.totalAccessoryPurchaseTotal2 / t.exchange_rate ,0 ) AS totalAccessoryPurchaseTotal2,
+        IFNULL( t.beforeDepartureTotal, 0 ) AS beforeDepartureTotal,
+        IFNULL( t.insuranceFee, 0 ) AS insuranceFee,
+        IFNULL( t.domesticShippingFee, 0 ) AS domesticShippingFee,
+        IFNULL(t.customsClearanceTaxFee ,0 ) AS customsClearanceTaxFee,
+        IFNULL(t.foreignCustomsClearanceFee ,0 ) AS foreignCustomsClearanceFee,
+        IFNULL( t.foreignTruckFee, 0 ) AS foreignTruckFee,
+        IFNULL( t.extraFee, 0 ) AS extraFee,
+        IFNULL( t.collectionAdditionalFees, 0 ) AS collectionAdditionalFees,
+        IFNULL( t.travelFee, 0 ) AS travelFee,
+        IFNULL(
+        ( Round ( ( t.old_purchase_amount / t.exchange_rate ), 2 ) / ( 1+ ( t.tax_refund_rate / 100 ) ) ) * (
+        t.tax_refund_rate / 100 ),
+        0
+        ) AS tax_refund_amount,
+        t.supplierName,
+        t.supplier_id,
+        t.cut_amount
+        FROM
+        t
+
+        ORDER BY
+        t.etd DESC,
+        t.rmpId asc
+        ) zzz
+        <where>
+            1=1
+
+            <if test="dto.etdBegin != null and dto.etdBegin != ''">
+                AND zzz.etd &gt;= #{dto.etdBegin}
+            </if>
+            <if test="dto.etdEnd != null and dto.etdEnd != ''">
+                AND zzz.etd &lt;= #{dto.etdEnd}
+            </if>
+            <if test="dto.productName != null and dto.productName != ''">
+                AND zzz.product_name LIKE CONCAT('%', #{dto.productName}, '%')
+            </if>
+
+            <if test="customerIds != null">
+                AND zzz.customer_id in
+                <foreach collection="customerIds" item="customerId" separator="," open="(" close=")">
+                    #{customerId}
+                </foreach>
+            </if>
+            <if test="dto.orderNum != null and dto.orderNum != ''">
+                AND zzz.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+            </if>
+
+            <if test="dto.productCategory != null and dto.productCategory != ''">
+                AND zzz.product_category = #{dto.productCategory}
+            </if>
+
+
+            and zzz.customs_clearance_time is NOT NULL
+
+            and zzz.order_type='2'
+        </where>
+        order by zzz.etd
+        <if test="dto.reportFormTimeOrder != null and dto.reportFormTimeOrder !='' and dto.reportFormTimeOrder == 'desc'">
+            desc
+        </if>
+
+        ,zzz.order_num desc,zzz.order_detail_id asc
+
+
+    </select>
+
+    <select id="listOrderExtraCosts" resultType="com.interesting.modules.order.vo.sub.ListXqOrderExtraCostVO">
+        select
+            xoec.id,xoec.instruction,xoec.price,xoec.currency,xoec.customer_order_num,xoec.exchange_rate,
+            xpi.product_name, xpi.product_specs, xpi.product_grade, xod.packaging, xod.layout_requirements,
+            xod.product_id, xoec.order_detail_id
+        from xq_order_extra_cost xoec
+        left join xq_order_detail xod on xod.id = xoec.order_detail_id
+        left join xq_product_info xpi on xpi.id = xod.product_id
+        where xoec.iz_delete =  0 and xoec.order_id = #{id}
+        group by xoec.id
+    </select>
+
+
+    <select id="listOrderCreditsInsuranceVOS"
+            resultType="com.interesting.modules.order.vo.sub.XqOrderCreditsInsuranceVO">
+        select
+           xci.id,
+           xci.order_id,
+           xci.credit_insurance_premium,
+           xci.exchange_rate,
+           xci.credit_insurance_premium_convert,
+           xci.insurance_effective_date
+        from xq_credit_insurance xci
+        where xci.iz_delete =  0 and xci.order_id = #{id} order by xci.create_time desc
+    </select>
+
+    <select id="listOrderFreightNoteVOS"
+            resultType="com.interesting.modules.freightInfo.vo.XqOrderFreightNoteVO">
+        select
+           xfn.id,
+           xfn.order_id,
+           xfn.insurance_date,
+           xfn.trans_info,
+           xfn.photos,
+           xfn.create_person
+        from xq_freight_note xfn
+        where xfn.iz_delete =  0 and xfn.order_id = #{id} order by insurance_date
+    </select>
+
+
+
+
+
+    <resultMap id="orderExportMap" type="com.interesting.modules.order.vo.XqOrderExportVO">
+        <id column="id" property="id"/>
+        <result column="customerName" property="customer"/>
+        <result column="delivery_address" property="deliveryAddress"/>
+        <result column="transportDetails" property="transportDetails"/>
+        <result column="invoiceDate" property="invoiceDate"/>
+        <result column="invoiceNum" property="invoiceNo"/>
+        <result column="etd" property="etd"/>
+        <result column="eta" property="eta"/>
+        <result column="containerNo" property="containerNo"/>
+        <result column="billOfLading" property="billOfLading"/>
+        <result column="voyageNumber" property="voyageNumber"/>
+        <result column="orderNum" property="orderNum"/>
+        <result column="termsOfPayment" property="termsOfPayment"/>
+        <result column="productionDate" property="productionDate"/>
+        <result column="netWeight" property="netWeight"/>
+        <result column="grossWeight" property="grossWeight"/>
+        <result column="sumVolume" property="sumVolume"/>
+        <result column="gross_weight" property="allGrossWeight"/>
+
+        <collection property="xqOrderExportProductVOS" javaType="java.util.List"
+                    ofType="com.interesting.modules.order.vo.XqOrderExportProductVO">
+            <id column="tid" property="id"/>
+            <result property="productName" column="productName"/>
+            <result property="packaging" column="packaging"/>
+<!--            <result property="totalWeight" column="totalWeight"/>-->
+            <result property="totalBoxes" column="totalBoxes"/>
+            <result property="unitPrice" column="unitPrice"/>
+            <result property="packagingUnitTxt" column="packagingUnitTxt"/>
+            <result property="weightUnitTxt" column="weightUnitTxt"/>
+<!--            <result property="salesAmount" column="salesAmount"/>-->
+            <result property="singleWeight" column="singleWeight"/>
+            <result property="singleAmount" column="singleAmount"/>
+            <result property="currency" column="currency"/>
+            <result property="cgWeight" column="cgWeight"/>
+            <result property="cgWeightKgs" column="cgWeightKgs"/>
+            <result property="cgWeightLbs" column="cgWeightLbs"/>
+            <result property="cgWeightUnit" column="cgWeightUnit"/>
+            <result property="ftWeightKgs" column="ftWeightKgs"/>
+            <result property="ftWeightLbs" column="ftWeightLbs"/>
+            <result property="volume" column="volume"/>
+
+        </collection>
+    </resultMap>
+
+    <select id="orderExportVOByGzy" resultMap = "orderExportMap">
+
+
+        SELECT
+            xo.id,
+            IFNULL(xc.NAME,'') AS customerName,
+            xo.delivery_address,
+            IFNULL(CONCAT('FROM ', xfi.loading_port,' PORT ', ' TO ', xfi.destination_port, ' PORT ' ),'') AS transportDetails,
+            DATE_FORMAT( IFNULL(xo.invoice_date ,''), '%Y/%m/%d') AS invoiceDate,
+            IFNULL(xo.invoice_num,'') AS invoiceNum,
+            DATE_FORMAT( IFNULL(xfi.etd ,''), '%m/%d/%Y') AS etd,
+            DATE_FORMAT( IFNULL(xfi.eta,'' ), '%m/%d/%Y') AS eta,
+            IFNULL(xfi.container_no,'') AS containerNo,
+            IFNULL(xfi.bill_of_lading,'') AS billOfLading,
+            IFNULL(xfi.voyage_number,'') AS voyageNumber,
+            IFNULL(xo.order_num,'') AS orderNum,
+            IFNULL(xopm.text,'') AS termsOfPayment,
+            DATE_FORMAT( IFNULL(xo.production_date ,''), '%c. %e, %Y') AS productionDate,
+            IFNULL(xfi.net_weight,'') AS netWeight,
+            IFNULL(xfi.gross_weight,'') AS grossWeight,
+            IFNULL(xfi.volume,'') AS sumVolume,
+            xod.id AS tid,
+            xod.product_name AS productName,
+            xod.packaging AS packaging,
+            xod.total_boxes AS totalBoxes,
+            IFNULL(xod.unitPrice,0.00) AS unitPrice,
+            IFNULL(xod.singleWeight,0.00) AS singleWeight,
+            xod.singleAmount AS singleAmount,
+            xod.weightUnitTxt weightUnitTxt,
+            xod.packagingUnitTxt packagingUnitTxt,
+            xod.currency currency,
+            xod.cgWeight,
+            xod.cgWeightKgs,
+            xod.cgWeightLbs,
+            xod.cgWeightUnit,
+            ROUND((xfi.gross_weight*xod.cgWeight/rmp.cgTotalWeight ),0) ftWeightKgs,
+            ROUND(ROUND((xfi.gross_weight*xod.cgWeight/rmp.cgTotalWeight ),0) / 0.454,0) ftWeightLbs,
+            ROUND((IFNULL(xfi.volume,0)*xod.cgWeight/rmp.cgTotalWeight ),0) volume,
+            ifnull(xfi.gross_weight, 0.00) gross_weight
+
+        FROM
+            xq_order xo
+                LEFT JOIN xq_customer xc ON xc.id = xo.customer_id
+                LEFT JOIN xq_freight_info xfi ON xfi.order_id = xo.id
+                LEFT JOIN (
+
+                SELECT order_id,SUM(weight) cgTotalWeight FROM xq_raw_material_purchase WHERE `iz_delete` = 0 GROUP BY order_id
+
+            ) rmp ON rmp.order_id = xo.`id`
+                LEFT JOIN (
+                SELECT
+                    xod.id,
+                    xod.order_id,
+                    xpi.product_name_en AS product_name,
+                    xod.packaging  AS packaging,
+                    xu.name AS packagingUnitTxt,
+                    xod.total_weight AS total_weight,
+                    xu1.name AS weightUnitTxt,
+                    xod.total_boxes AS total_boxes,
+                    xod.price_per_lb AS unitPrice,
+                    xod.total_weight AS singleWeight,
+                    xod.sales_amount AS singleAmount,
+                    xod.currency,
+                    ROUND(IF(rmp.weight_unit = 1,rmp.`weight`,rmp.`weight`*0.454),0) AS cgWeightKgs,
+                    ROUND(IF(rmp.weight_unit != 1,rmp.`weight`,rmp.`weight`/0.454),0) AS cgWeightLbs,
+                    rmp.`weight` AS cgWeight,
+                    rmp.`weight_unit` AS cgWeightUnit
+                FROM
+                    xq_order_detail xod
+                        LEFT JOIN xq_order o ON xod.order_id = o.id
+                        LEFT JOIN xq_product_info xpi ON xod.product_id = xpi.id
+                        LEFT JOIN xq_unit xu ON xu.id = xod.packaging_unit
+                        LEFT JOIN xq_unit xu1 ON xu1.id = xod.weight_per_box_unit
+                        LEFT JOIN xq_raw_material_purchase rmp ON rmp.`order_id` = xod.`order_id`
+                        AND rmp.`iz_delete` = 0 AND rmp.product_id = xod.product_id AND rmp.layout_requirements = xod.layout_requirements
+
+                WHERE
+                    xod.iz_delete = 0
+            ) xod ON xod.order_id = xo.id
+                LEFT JOIN xq_order_payment_method xopm ON xopm.id=xo.payment_method
+        WHERE
+          xo.id = #{orderId}
+          AND xo.`iz_delete`  = 0
+
+
+
+
+
+    </select>
+
+
+    <select id="pageSellProfit1" resultType="com.interesting.modules.reportform.vo.SellProfitPageVO1">
+
+        select
+        ((purchase_amount+
+        accessoryPurchaseTotal+
+        beforeDepartureTotal+
+        insuranceFee+
+        domesticShippingFee+
+        customsClearanceTaxFee+
+        foreignCustomsClearanceFee+
+        foreignTruckFee+
+        extraFee+
+        commission+
+        travelFee-
+        tax_refund_amount
+        ) / totalWeight) as totalAmount,
+        order_detail_id
+        from (
+        SELECT
+
+        IFNULL( order_detail_id,'-' ) AS order_detail_id,
+        IFNULL( Round ( `total_weight`, 2 ), 0.00 ) AS totalWeight,
+        IFNULL( Round ( `ratio`, 2 ), 0.00 ) AS ratio,
+
+        IFNULL( Round ( purchase_amount, 2 ), 0.00 ) AS purchase_amount,
+        IFNULL( Round ( `accessoryPurchaseTotal`, 2 ), 0.00 ) AS accessoryPurchaseTotal,
+        IFNULL( Round ( `beforeDepartureTotal`, 2 ), 0.00 ) AS beforeDepartureTotal,
+        IFNULL( Round ( `insuranceFee`, 2 ), 0.00 ) AS insuranceFee,
+        IFNULL( Round ( `domesticShippingFee`, 2 ), 0.00 ) AS domesticShippingFee,
+        IFNULL( Round ( `customsClearanceTaxFee`, 2 ), 0.00 ) AS customsClearanceTaxFee,
+        IFNULL( Round ( `foreignCustomsClearanceFee`, 2 ), 0.00 ) AS foreignCustomsClearanceFee,
+        IFNULL( Round ( `foreignTruckFee`, 2 ), 0.00 ) AS foreignTruckFee,
+        IFNULL( Round ( `extraFee`, 2 ), 0.00 ) AS extraFee,
+        IFNULL( Round ( `travelFee`, 2 ), 0.00 ) AS travelFee,
+        IFNULL( Round ( `tax_refund_amount`, 2 ), 0.00 ) AS tax_refund_amount,
+        IFNULL( Round ( `commission`, 2 ), 0.00 ) AS commission
+        FROM
+        (
+        WITH rt AS ( SELECT id, exchange_rate FROM xq_order WHERE iz_delete = 0 ),
+        t AS (
+        SELECT
+        o.customer_id,
+        o.order_type,
+        o.exchange_rate,
+        fi.etd,
+        fi.customs_clearance_time,
+        ( SELECT count( od.order_id ) FROM xq_order_detail od WHERE od.order_id = o.id and od.iz_delete=0 ) AS
+        record_count,
+        c.NAME AS customerName,
+        c.abbr AS customerAbbr,
+        o.order_num,
+        od.product_id,
+        od.id AS order_detail_id,
+        od.weight_per_box AS weight_per_box,
+        od.total_boxes AS od_total_box,
+        pd.product_name,
+        od.total_weight AS total_weight,
+        CASE
+
+        WHEN od.price_per_lb IS NULL THEN
+        IF
+        ( od.currency != 'USD', ( ( od.sales_amount / od.total_weight ) / od.detail_exchange_rate ), od.price_per_box )
+        WHEN od.price_per_lb = 0 THEN
+        IF
+        ( od.currency != 'USD', ( ( od.sales_amount / od.total_weight ) / od.detail_exchange_rate ), od.price_per_box )
+        ELSE
+        IF
+        ( od.currency != 'USD', ( od.price_per_lb / od.detail_exchange_rate ), od.price_per_lb )
+        END AS price_per_box,
+        IF
+        ( od.currency != 'USD', ( od.sales_amount / od.detail_exchange_rate ), od.sales_amount ) AS sales_amount,
+        t.all_box,
+        round( rmp.weight / t.all_box, 2 ) AS ratio,
+        rmp.real_unit_price,
+        rmp.id as rmpId,
+        rmp.weight as weight,
+        rmp.purchase_amount,
+        rmp.old_purchase_amount,
+        rmp.currency as raw_currency,
+        rmp.tax_refund_rate AS tax_refund_rate,
+        rmp2.tax_refund_amount * round( rmp.weight / t.all_box, 2 ) as tax_refund_amount,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'ddkc'
+        AND cc.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS customerCommission,
+        (SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'ddkc'
+        AND cc.order_id = o.id
+        ) AS totalCustomerCommission,
+        (
+        SELECT
+        sum(cc.percentage) / 100
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'sfyj'
+        AND cc.order_id = o.id
+        ) AS thirdPartImportCommission,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'zjsyj'
+        AND cc.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS middleManCommission,
+        (
+        SELECT
+        SUM( cc.amount )
+        FROM
+        xq_order_commission cc
+        WHERE
+        cc.iz_delete = 0
+        AND cc.commission_type = 'zjsyj'
+        AND cc.order_id = o.id
+        ) AS totalMiddleManCommission,
+        ( SELECT SUM( rem.quality ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) *
+        round( rmp.weight / t.all_box, 2 ) AS qualityDeduction,
+        ( SELECT SUM( rem.quality ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) AS
+        totalQualityDeduction,
+
+
+        IF ( t.record_count > 1,round(( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0
+        AND rem.order_id = o.id ) /
+        ( SELECT SUM( xq_o.sales_amount ) FROM xq_order_detail xq_o WHERE xq_o.iz_delete = 0 AND xq_o.order_id = o.id )
+        , 2 ) * od.sales_amount,
+        ( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id )) AS
+        discount,
+        ( SELECT SUM( rem.discount ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id ) AS
+        totalDiscount,
+        ( SELECT SUM( rem.credit_insurance_premium_convert ) FROM xq_credit_insurance rem WHERE rem.iz_delete = 0 AND
+        rem.order_id = o.id ) * round( rmp.weight / t.all_box, 2 ) AS creditInsurancePremium,
+        ( SELECT SUM( rem.credit_insurance_premium_convert ) FROM xq_credit_insurance rem WHERE rem.iz_delete = 0 AND
+        rem.order_id = o.id ) AS totalCreditInsurancePremium,
+        ( SELECT SUM( rem.factoring_interest ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id =
+        o.id ) * round( rmp.weight / t.all_box, 2 ) AS factoringInterest,
+        ( SELECT SUM( rem.factoring_interest ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id =
+        o.id ) AS totalFactoringInterest,
+        ( SELECT SUM( rem.service_charge ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS service_charge,
+        ( SELECT SUM( rem.service_charge ) FROM xq_remittance_detail rem WHERE rem.iz_delete = 0 AND rem.order_id = o.id
+        ) AS totalServiceCharge,
+        ifnull( apu.tax_included_amount, 0 ) * round( rmp.weight / t.all_box, 2 ) AS accessoryPurchaseTotal,
+        ifnull( apu1.tax_included_amount1 * round( rmp.weight / t.all_box, 2 ), 0 ) AS accessoryPurchaseTotal1,
+        ifnull( apu2.tax_included_amount2 * round( rmp.weight / t.all_box, 2 ), 0 ) AS accessoryPurchaseTotal2,
+
+        ifnull( apu.tax_included_amount, 0 ) AS totalAccessoryPurchaseTotal,
+        ifnull( apu1.tax_included_amount1, 0 ) AS totalAccessoryPurchaseTotal1,
+        ifnull( apu2.tax_included_amount2 , 0 ) AS totalAccessoryPurchaseTotal2,
+
+
+        IF
+        (
+        tt.currency_record_count > 1,
+        (
+        SELECT
+        ( IF ( fci.currency != 'USD', Round(SUM(fci.price) / o.exchange_rate , 2 ), SUM(fci.price) ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type != 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) * round( rmp.weight / t.all_box, 2 ),
+        (
+        SELECT
+        ( IF ( fci.currency != 'USD', Round(SUM(fci.price) / o.exchange_rate , 2 ), SUM(fci.price) ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type != 'gnhyf'
+        AND fci.iz_domestic = 1
+        )
+        ) AS beforeDepartureTotal,
+        tt.currency_record_count,
+        (
+        SELECT
+        ( IF ( fci.currency != 'USD', Round(SUM(fci.price) / o.exchange_rate , 2 ), SUM(fci.price)) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.iz_domestic = 1
+        AND fci.fee_type != 'gnhyf'
+        ) AS totalBeforeDepartureTotal,
+        CASE
+
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) >= 0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 200.00
+        ) * round( rmp.weight / t.all_box, 2 )
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) &lt;
+        0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 100.00
+        ) * round( rmp.weight / t.all_box, 2 ) ELSE 0
+        END AS insuranceFee,
+        CASE
+
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) >= 0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 200.00
+        )
+        WHEN DATEDIFF( fi.etd, '2023-08-01' ) &lt;
+        0 THEN
+        (
+        ifNull( ( SELECT insurance_fee FROM xq_insurance_expenses iex WHERE iex.iz_delete = 0 AND iex.order_id = o.id ),
+        0 ) + 100.00
+        ) ELSE 0
+        END AS totalInsuranceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) * round( rmp.weight / t.all_box, 2 ) AS domesticShippingFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gnhyf'
+        AND fci.iz_domestic = 1
+        ) AS totalDomesticShippingFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'qggs'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS customsClearanceTaxFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'qggs'
+        AND fci.iz_domestic = 0
+        ) AS totalCustomsClearanceTaxFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwqgf'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS foreignCustomsClearanceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwqgf'
+        AND fci.iz_domestic = 0
+        ) AS totalForeignCustomsClearanceFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwkcf'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS foreignTruckFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type = 'gwkcf'
+        AND fci.iz_domestic = 0
+        ) AS totalForeignTruckFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type LIKE 'ewfy%'
+        AND fci.iz_domestic = 0
+        ) * round( rmp.weight / t.all_box, 2 ) AS extraFee,
+        (
+        SELECT
+        SUM( IF ( fci.currency != 'USD', ( fci.price / o.exchange_rate ), fci.price ) )
+        FROM
+        xq_freight_cost_info fci
+        WHERE
+        fci.iz_delete = 0
+        AND fci.order_id = o.id
+        AND fci.fee_type LIKE 'ewfy%'
+        AND fci.iz_domestic = 0
+        ) AS totalExtraFee,
+        ( o.travel_fee * round( rmp.weight / t.all_box, 2 ) ) AS travelFee,
+        o.travel_fee AS totalTravelFee,
+        (
+        SELECT
+        SUM( IF ( oec.currency != 'USD', ( oec.price / o.exchange_rate ), oec.price ) )
+        FROM
+        xq_order_extra_cost oec
+        WHERE
+        oec.iz_delete = 0
+        AND oec.order_id = o.id
+        ) * round( rmp.weight / t.all_box, 2 ) AS collectionAdditionalFees,
+        (
+        SELECT
+        SUM( IF ( oec.currency != 'USD', ( oec.price / o.exchange_rate ), oec.price ) )
+        FROM
+        xq_order_extra_cost oec
+        WHERE
+        oec.iz_delete = 0
+        AND oec.order_id = o.id
+        ) AS totalCollectionAdditionalFees,
+        rmp.supplier_id,
+        sup.NAME AS supplierName,
+        com.commission * round( rmp.weight / t.all_box, 2 ) AS commission
+        FROM
+        xq_order o
+        LEFT JOIN xq_customer c ON c.id = o.customer_id
+        AND c.iz_delete = 0
+        LEFT JOIN xq_order_detail od ON od.order_id = o.id
+        AND od.iz_delete = 0
+        LEFT JOIN xq_product_info pd ON pd.id = od.product_id
+        AND pd.iz_delete = 0
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id in ('1702556752196595713')
+        GROUP BY
+        apu.order_id
+        ) apu ON apu.order_id = o.id
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount1,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id in
+        ('1702556913677299714','1736668764186763266','1702561185135521793','1702561262365241346','1702561496394821633','1702561314655629314')
+        GROUP BY
+        apu.order_id
+        ) apu1 ON apu1.order_id = o.id
+        LEFT JOIN (
+        SELECT
+        ( sum( apu.tax_included_amount ) ) AS tax_included_amount2,
+        apu.product_id AS product_id,
+        apu.order_id AS order_id,
+        apu.supplier_id
+        FROM
+        xq_accessories_purchase apu
+        LEFT JOIN xq_accessory_info xai on apu.accessory_id =xai.id
+        WHERE
+        apu.iz_delete = 0
+        and xai.category_id in ('1702556887416762369')
+        GROUP BY
+        apu.order_id
+        ) apu2 ON apu2.order_id = o.id
+        LEFT JOIN (
+        SELECT
+        order_id,
+        SUM( ifNull( weight, 0 ) ) AS all_box,
+        COUNT( * ) AS record_count
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        GROUP BY
+        order_id
+        ) t ON t.order_id = od.order_id
+        LEFT JOIN (
+        SELECT
+        order_id,
+        COUNT( * ) AS currency_record_count
+        FROM
+        xq_raw_material_purchase
+        WHERE
+        iz_delete = 0
+        GROUP BY
+        order_id
+        ) tt ON tt.order_id = od.order_id
+        LEFT JOIN (
+        SELECT
+        rmp.id,
+        rmp.order_id,
+        rmp.product_id,
+        rmp.currency,
+        rmp.supplier_id,
+        rmp.layout_requirements,
+        IF
+        ( rmp.currency != 'USD', Round ( ( rmp.real_unit_price / rt.exchange_rate ), 6 ) , rmp.real_unit_price ) AS
+        real_unit_price,
+        rmp.weight AS weight,
+        rmp.purchase_amount AS old_purchase_amount,
+        IF
+        ( rmp.currency != 'USD', Round ( Round ( ( rmp.real_unit_price / rt.exchange_rate ),5 ) * rmp.weight ,2) ,
+        Round ( rmp.real_unit_price * rmp.weight ,2)
+        )AS
+        purchase_amount,
+        rmp.tax_refund_rate AS tax_refund_rate
+        FROM
+        xq_raw_material_purchase rmp
+        LEFT JOIN rt ON rt.id = rmp.order_id
+        WHERE
+        rmp.iz_delete = 0
+        GROUP BY
+        product_id,
+        order_id,
+        rmp.layout_requirements
+        ) rmp ON rmp.order_id = o.id
+        AND od.product_id = rmp.product_id
+        and rmp.layout_requirements = od.layout_requirements
+        left join (
+        select rmp2.order_id,
+        sum(Round(if(rmp2.currency != 'USD', rmp2.tax_refund_amount / rt.exchange_rate, rmp2.tax_refund_amount), 2)) as tax_refund_amount
+        FROM
+        xq_raw_material_purchase rmp2
+        LEFT JOIN rt ON rt.id = rmp2.order_id
+        WHERE
+        rmp2.iz_delete = 0
+        GROUP BY
+        rmp2.order_id
+        ) rmp2 ON rmp2.order_id = o.id
+        LEFT JOIN xq_supplier sup ON sup.id = rmp.supplier_id
+        AND sup.iz_delete = 0
+        LEFT JOIN xq_freight_info fi ON fi.order_id = o.id
+        left join (
+        select
+        xoc.order_id,
+        xod.id order_detail_id,
+        sum(xoc.amount) as commission
+        from
+        xq_order_commission xoc
+        left join xq_order xo
+        on xo.id = xoc.order_id
+        and xo.iz_delete = 0
+        left join xq_order_detail xod
+        on xod.order_id = xo.id
+        and xod.iz_delete = 0
+        left join xq_overseas_exit_detail xoed
+        on xoed.customer_order_num = xoc.customer_order_num
+        and xoed.source_rep_num = xo.order_num
+        and xoed.product_id = xod.product_id
+        and xoed.iz_delete = 0
+        where
+        xoc.iz_delete = 0
+        and xoc.commission_type = 'sfyj'
+        and xoed.id is not null
+        group by xoc.order_id,
+        xod.id
+        ) com on com.order_id = o.id
+        and com.order_detail_id = od.id
+        WHERE
+        o.iz_delete = 0
+        and fi.iz_delete=0
+        GROUP BY
+        od.id
+        ) SELECT
+        t.customer_id,
+        t.record_count,
+        t.totalTravelFee,
+        t.exchange_rate,
+        t.etd,
+        t.customs_clearance_time,
+        t.customerName,
+        t.customerAbbr,
+        t.order_num,
+        t.purchase_amount,
+        t.totalInsuranceFee,
+        t.order_type,
+        t.old_purchase_amount,
+        t.product_id,
+        t.order_detail_id,
+        t.product_name,
+        t.total_weight,
+        t.tax_refund_rate,
+        t.od_total_box,
+        t.totalCreditInsurancePremium,
+        t.all_box,
+        t.service_charge,
+        t.price_per_box,
+        t.raw_currency,
+        t.rmpId,
+        t.sales_amount,
+        t.ratio,
+        t.real_unit_price,
+        t.weight,
+        t.totalMiddleManCommission,
+        t.totalCustomerCommission,
+        t.totalQualityDeduction,
+        t.totalDiscount,
+        t.totalFactoringInterest,
+        t.totalDomesticShippingFee,
+        t.totalForeignTruckFee,
+        t.totalBeforeDepartureTotal,
+        t.totalServiceCharge as totalServiceCharge,
+        t.totalCustomsClearanceTaxFee,
+        t.totalForeignCustomsClearanceFee,
+        t.totalCollectionAdditionalFees,
+        t.totalExtraFee,
+        IFNULL( t.customerCommission, 0 ) AS customerCommission,
+        IFNULL( ( IF ( t.record_count > 1, t.total_weight, t.total_weight ) * t.thirdPartImportCommission ), 0 ) AS
+        thirdPartImportCommission,
+        IFNULL( t.middleManCommission, 0 ) AS middleManCommission,
+        IFNULL( t.qualityDeduction, 0 ) AS qualityDeduction,
+        IFNULL( t.discount, 0 ) AS discount,
+        IFNULL( t.creditInsurancePremium, 0 ) AS creditInsurancePremium,
+        IFNULL( t.factoringInterest, 0 ) AS factoringInterest,
+        IFNULL( t.accessoryPurchaseTotal / t.exchange_rate, 0 ) AS accessoryPurchaseTotal,
+        IFNULL(t.accessoryPurchaseTotal1 / t.exchange_rate , 0 ) AS accessoryPurchaseTotal1,
+        IFNULL(t.accessoryPurchaseTotal2 / t.exchange_rate ,0 ) AS accessoryPurchaseTotal2,
+        IFNULL( t.totalAccessoryPurchaseTotal / t.exchange_rate, 0 ) AS totalAccessoryPurchaseTotal,
+        IFNULL(t.totalAccessoryPurchaseTotal1 / t.exchange_rate , 0 ) AS totalAccessoryPurchaseTotal1,
+        IFNULL(t.totalAccessoryPurchaseTotal2 / t.exchange_rate ,0 ) AS totalAccessoryPurchaseTotal2,
+        IFNULL( t.beforeDepartureTotal, 0 ) AS beforeDepartureTotal,
+        IFNULL( t.insuranceFee, 0 ) AS insuranceFee,
+        IFNULL( t.domesticShippingFee, 0 ) AS domesticShippingFee,
+        IFNULL(t.customsClearanceTaxFee ,0 ) AS customsClearanceTaxFee,
+        IFNULL(t.foreignCustomsClearanceFee ,0 ) AS foreignCustomsClearanceFee,
+        IFNULL( t.foreignTruckFee, 0 ) AS foreignTruckFee,
+        IFNULL( t.extraFee, 0 ) AS extraFee,
+        IFNULL( t.collectionAdditionalFees, 0 ) AS collectionAdditionalFees,
+        IFNULL( t.travelFee, 0 ) AS travelFee,
+        IFNULL(
+        t.tax_refund_amount,
+        0
+        ) AS tax_refund_amount,
+        t.supplierName,
+        t.supplier_id,
+        t.commission
+        FROM
+        t
+
+        ORDER BY
+        t.etd DESC,
+        t.rmpId asc
+        ) zzz
+        <where>
+            1=1
+            <if test="dto.orderNum != null and dto.orderNum != ''">
+                AND zzz.order_num LIKE CONCAT('%', #{dto.orderNum}, '%')
+            </if>
+
+            and zzz.customs_clearance_time is NOT NULL
+
+            and zzz.order_type='1'
+        </where>
+        order by zzz.etd
+        desc
+
+
+        ,zzz.order_num desc,zzz.order_detail_id asc
+        ) ttt
+
+
+    </select>
+
+
+    <select id="getKaCheFee" resultType="com.interesting.modules.freightcost.entity.XqFreightCostInfo">
+        SELECT
+            *
+        FROM xq_freight_cost_info
+        WHERE iz_delete = 0
+        AND customer_id = #{customerId}
+        AND `order_id`= #{orderId}
+        AND `fee_type`  LIKE 'gwkcf%'
+    </select>
+    <select id="getFreightCostInfoByAddress" resultType="com.interesting.modules.freightcost.entity.XqFreightCostInfo">
+        SELECT
+            *
+        FROM xq_freight_cost_info
+        WHERE iz_delete = 0
+        AND customer_id = #{customerId}
+        AND `order_id` is null
+        AND address = #{deliveryAddress}
+    </select>
+    <select id="listWarehouseFretCost" resultType="com.interesting.modules.order.vo.sub.XqOrderFretCostVO">
+        SELECT fci.id,
+        fci.supplier_id,
+        fci.customer_id,
+        fci.agent,
+        fci.remark,
+        fci.currency,
+        fci.address,
+        fci.price,
+        fci.application_time,
+        fci.finance_amount,
+        fci.finance_audit_time,
+        fci.fee_type,
+        ftp.item_text AS feeTypeTxt,
+        fci.iz_domestic,
+        fci.iz_default_color,
+        fci.warehouse_id
+
+        FROM xq_freight_cost_info fci
+        <!-- 字典查 fee_type -->
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = fci.fee_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'fee_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+
+        WHERE fci.iz_delete = 0
+        AND fci.warehouse_id = #{warehouseId}
+        and fci.order_id is Null
+        <if test="orderId != null and '' != orderId">
+            AND (fci.`fee_type` NOT LIKE 'gwkcf%' OR fci.id = #{orderId})
+        </if>
+    </select>
+
+</mapper>

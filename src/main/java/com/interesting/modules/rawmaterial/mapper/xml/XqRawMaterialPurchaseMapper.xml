@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.rawmaterial.mapper.XqRawMaterialPurchaseMapper">
+
+
+    <update id="updateImport">
+UPDATE `xq_raw_material_purchase`
+ SET `kpzl` = #{raw.kpzl},
+     `jxkprq` = #{raw.jxkprq},
+     `jxfph` = #{raw.jxfph},
+     `fpje` = #{raw.fpje},
+     `fpse` = #{raw.fpse},
+     `ckrq` = #{raw.ckrq},
+     `hs_code` = #{raw.hsCode},
+     `bgje_cfr` = #{raw.bgjeCfr},
+      `hyf` = #{raw.hyf},
+      `bgje_fob` = #{raw.bgjeFob},
+       `kphl` = #{raw.kphl},
+       `ckfpje` = #{raw.ckfpje},
+        `ckfprq` = #{raw.ckfprq},
+         `ckfphm` = #{raw.ckfphm},
+          `tsl` = #{raw.tsl},
+          `tssj` = #{raw.tssj},
+          `tsje` = #{raw.tsje},
+          `sdtssj` = #{raw.sdtssj},
+          `shje` = #{raw.shje},
+          `shsj` = #{raw.shsj},
+          `shje2` = #{raw.shje2},
+          `shsj2` = #{raw.shsj2},
+          `shje3` = #{raw.shje3},
+          `shsj3` = #{raw.shsj3},
+          `shyh` = #{raw.shyh},
+          `ckfptt` =#{raw.ckfptt}
+          WHERE `id` = #{raw.id};
+
+
+
+    </update>
+    <select id="queryNotPayOrder" resultType="com.interesting.modules.remittance.vo.QueryDataNotInDetailVO">
+        select rmp.order_id id, o.order_num,
+        case
+        when (datediff(rmp.first_payment_expire_date, now()) &lt;= 7 and pd.pay_money &lt; rmp.purchase_amount * rmp.first_payment_rate / 100) then rmp.first_payment_expire_date
+        when (datediff(rmp.payment_expire_date, now()) &lt;= 7 and pd.pay_money &lt; rmp.purchase_amount) then rmp.payment_expire_date
+        else null
+        end as remittanceExpireDate
+        from xq_raw_material_purchase rmp
+        left join xq_order o on o.id = rmp.order_id
+        left join (select source_id, sum(pay_money) pay_money from xq_payment_detail where iz_delete = 0 group by source_id) pd on pd.source_id = rmp.id
+        where
+        rmp.iz_delete = 0
+        and (
+        (datediff(rmp.first_payment_expire_date, now()) &lt;= 7 and pd.pay_money &lt; rmp.purchase_amount * rmp.first_payment_rate / 100)
+        or
+        (datediff(rmp.payment_expire_date, now()) &lt;= 7 and pd.pay_money &lt; rmp.purchase_amount)
+        )
+        and o.iz_remind_payment = 1
+        group by rmp.id
+        order by rmp.create_time desc, rmp.id desc
+    </select>
+</mapper>

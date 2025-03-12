@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.freightcost.mapper.XqFreightCostInfoMapper">
+
+
+    <select id="getByType" resultType="com.interesting.modules.freightcost.entity.XqFreightCostInfo">
+        select * from xq_freight_cost_info
+         where order_id=#{orderId}
+--          and customer_id is null
+--          and supplier_id is null
+         and fee_type=#{fee_type}
+         and iz_return_fee=0
+         and iz_delete=0
+    </select>
+
+
+    <select id="getByType1" resultType="com.interesting.modules.freightcost.entity.XqFreightCostInfo">
+        select * from xq_freight_cost_info
+         where order_id=#{orderId}
+--          and customer_id is null
+--          and supplier_id is null
+         and fee_type=#{fee_type}
+         and iz_domestic=0
+         and iz_return_fee=0
+         and iz_delete=0
+    </select>
+</mapper>

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.accmaterial.mapper.XqInventoryCheckDetailMapper">
+
+    <resultMap id="inventoryCheckDetailVOMap" type="com.interesting.modules.accmaterial.vo.InventoryCheckDetailVO">
+        <id property="id" column="id"/>
+        <result column="checkUserName" property="checkUserName"/>
+        <result column="check_user_id" property="checkUserId"/>
+        <result column="warehouse_id" property="warehouseId"/>
+        <result column="warehouseName" property="warehouseName"/>
+        <result column="remark" property="remark"/>
+        <result column="check_time" property="checkTime"/>
+        <result column="rep_num" property="repNum"/>
+
+        <collection property="pdDetails" javaType="list" notNullColumn="detailId"
+                    ofType="com.interesting.modules.accmaterial.vo.InventoryCheckDetailRecordVO">
+            <result column="detailId" property="id"/>
+            <result column="accessory_id" property="accessoryId"/>
+            <result column="current_inventory" property="currentInventory"/>
+            <result column="real_inventory" property="realInventory"/>
+            <result column="check_inventory" property="checkInventory"/>
+            <result column="size" property="size"/>
+            <result column="accessory_name" property="accessoryName"/>
+            <result column="warehouse_id" property="warehouseId"/>
+            <result column="warehouseName" property="warehouseName"/>
+            <result column="unit_price" property="unitPrice"/>
+            <result column="material_specification" property="materialSpecification"/>
+            <result column="source_rep_num" property="sourceRepNum"/>
+            <result column="currency" property="currency"/>
+        </collection>
+
+    </resultMap>
+
+    <select id="getInventoryCheckDetById"
+            resultMap="inventoryCheckDetailVOMap">
+        SELECT chk.id,
+               chk.remark,
+               chk.check_user_id,
+               su.realname AS checkUserName,
+               chk.warehouse_id,
+               wh.name AS warehouseName,
+               chk.check_time,
+               chk.rep_num,
+
+               chkd.id AS detailId,
+               chkd.accessory_id,
+               chkd.current_inventory,
+               chkd.real_inventory,
+               chkd.check_inventory,
+               chkd.unit_price,
+               acc.accessory_name,
+               acc.size,
+               acc.material_specification,
+               chkd.source_rep_num,
+               chkd.currency
+
+        FROM xq_inventory_check chk
+        LEFT JOIN xq_inventory_check_detail chkd ON chk.id = chkd.source_id AND chkd.iz_delete = 0
+        LEFT JOIN sys_user su ON su.id = chk.check_user_id AND su.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = chk.warehouse_id AND wh.iz_delete = 0
+        LEFT JOIN xq_accessory_info acc ON acc.id = chkd.accessory_id AND acc.iz_delete = 0
+        WHERE chk.id = #{id}
+
+    </select>
+</mapper>

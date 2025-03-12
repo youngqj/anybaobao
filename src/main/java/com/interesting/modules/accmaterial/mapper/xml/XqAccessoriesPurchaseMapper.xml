@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.accmaterial.mapper.XqAccessoriesPurchaseMapper">
+
+
+    <select id="listByExport" resultType="com.interesting.modules.accmaterial.vo.XqAccessoriesExportVO">
+             SELECT
+            xpi.product_name,
+            xap.packaging,
+            xu.`name` as packaging_unit,
+            xap.layout_requirements,
+            xs.`name` AS supplier_name,
+            xap.purchase_contract_no,
+            xai.accessory_name,
+            xai.size,
+            xai.material_specification,
+            xap.order_quantity,
+            xap.currency,
+            xap.unit_price,
+            xap.purchase_amount,
+            xap.tax_rate,
+            xap.tax_included_amount,
+            xap.purchase_note
+        FROM
+            xq_accessories_purchase xap
+            LEFT JOIN xq_order xo ON xap.order_id = xo.id
+            LEFT JOIN xq_supplier xs ON xap.supplier_id = xs.id
+            LEFT JOIN xq_accessory_info xai ON xap.accessory_id = xai.id
+            LEFT JOIN xq_unit xu on xu.id=xap.packaging_unit
+            LEFT JOIN xq_product_info xpi ON xpi.id = xap.product_id
+            where xo.order_num=#{orderNum}
+    </select>
+</mapper>

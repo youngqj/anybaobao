@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.remittance.mapper.XqRemittanceExpireMapper">
+
+    <select id="queryDataNotInDetail"
+            resultType="com.interesting.modules.remittance.vo.QueryDataNotInDetailVO">
+        select xo.id,
+               xo.order_num,
+               null as customer_order_num,
+               min(xre.remittance_expire_date) remittanceExpireDate
+        from xq_remittance_expire xre
+                 left join xq_order xo on xre.order_id = xo.id and xo.iz_delete = 0
+        where xre.iz_delete = 0
+          and xo.id not in
+              (select xrd.order_id
+               from xq_remittance_detail xrd
+               where xrd.iz_delete = 0
+                and xrd.outstanding_receivables &lt;= 0
+                   )
+          and xo.iz_remind = 1
+          and datediff(CURRENT_DATE, xre.remittance_expire_date) &gt;= -10
+          and xo.order_type = '2'
+        group by xo.id
+        union
+        select xo.id,
+               xo.order_num,
+               oed.customer_order_num,
+               oed.payment_expire_date remittanceExpireDate
+        from xq_overseas_exit_detail oed
+                 left join xq_order xo on oed.source_rep_num = xo.order_num and xo.iz_delete = 0
+                 left join
+                 (select order_id, order_num, sum(ifnull(outstanding_receivables, 0)) outstanding_receivables
+                 from xq_remittance_detail
+                 where iz_delete = 0
+                 group by order_id, order_num) rd
+                 on rd.order_id = xo.id
+                 and rd.order_num = oed.customer_order_num
+        where oed.iz_delete = 0
+          and xo.iz_remind = 1
+          and rd.outstanding_receivables &gt; 0
+          and datediff(CURRENT_DATE, oed.payment_expire_date) &gt;= -10
+          and xo.order_type = '1'
+        group by xo.id, oed.customer_order_num
+        order by remittanceExpireDate
+    </select>
+</mapper>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.overseas.mapper.XqOverseasInventoryCheckMapper">
+
+    <select id="pageInventoryCheck"
+            resultType="com.interesting.modules.overseas.vo.OverSeasInventoryCheckPageVO">
+        SELECT iotc.id,
+        GROUP_CONCAT( DISTINCT concat(prd.product_name,'(',prd.packaging,' ',case prd.packaging_unit when 1 then 'kg'
+        when 2 then 'lbs' end,')') SEPARATOR ' | ' ) AS productName,
+               iotc.check_user_id,
+               su.realname AS checkUserName,
+               iotc.warehouse_id,
+               wh.name AS warehouseName,
+        iotc.check_time as check_time,
+        GROUP_CONCAT(DISTINCT iotcd.warehouse_lot SEPARATOR ' | ') as warehouseLot,
+               iotc.audit_status
+
+        FROM xq_overseas_inventory_check iotc
+        LEFT JOIN xq_overseas_inventory_check_detail iotcd ON iotc.id = iotcd.source_id
+        LEFT JOIN xq_product_info prd ON prd.id = iotcd.product_id AND prd.iz_delete = 0
+        LEFT JOIN xq_warehouse wh ON wh.id = iotc.warehouse_id AND wh.iz_delete = 0
+        LEFT JOIN sys_user su ON su.id = iotc.check_user_id AND su.iz_delete = 0
+
+        WHERE iotc.iz_delete = 0
+        <if test="dto.checkTimeStart != null and dto.checkTimeStart != ''">
+            AND iotc.check_time &gt;= #{dto.checkTimeStart}
+        </if>
+        <if test="dto.checkTimeEnd != null and dto.checkTimeEnd != ''">
+            AND iotc.check_time &lt;= #{dto.checkTimeEnd}
+        </if>
+        <if test="dto.checkUserId != null and dto.checkUserId != ''">
+            AND iotc.check_user_id = #{dto.checkUserId}
+        </if>
+
+        <if test="dto.warehouseLot != null and dto.warehouseLot != ''">
+            AND iotcd.warehouse_lot LIKE CONCAT('%', #{dto.warehouseLot}, '%')
+        </if>
+
+        GROUP BY iotc.id, iotc.check_time
+
+        ORDER BY iotc.check_time DESC
+    </select>
+</mapper>

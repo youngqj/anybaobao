@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.interesting.modules.prepayments.mapper.XqPrepaymentsMapper">
+
+    <select id="queryListBySupplierAndCurrency"
+            resultType="com.interesting.modules.prepayments.dto.XqPrepaymentsDto">
+        select xp.id,
+        ifnull(xp.prepayment_amount, 0) prepayment_amount,
+        ifnull(sum(pay_money), 0) paidAmount,
+        ifnull((xp.prepayment_amount - ifnull(sum(pay_money), 0)), 0) remainderAmount,
+        xp.remark
+        from xq_prepayments xp
+        left join xq_payment_detail xpd on xpd.prepayments_id = xp.id and xpd.iz_delete = 0
+        where
+        xp.iz_delete = 0
+        <if test="supplierId != null and supplierId != ''">
+            and xp.supplier_id = #{supplierId}
+        </if>
+        <if test="currency != null and currency != ''">
+            and xp.currency = #{currency}
+        </if>
+        group by xp.id
+        having remainderAmount &gt; 0
+        order by xp.create_time desc
+    </select>
+    <select id="queryPageList" resultType="com.interesting.modules.prepayments.dto.XqPrepaymentsResDto">
+        select xp.id,
+        ifnull(xp.prepayment_amount, 0) prepayment_amount,
+        ifnull(sum(pay_money), 0) paidAmount,
+        ifnull((xp.prepayment_amount - ifnull(sum(pay_money), 0)), 0) remainderAmount,
+        xp.remark,
+        xp.payment_date,
+        xp.currency,
+        xs.name supplierName,
+        xpc.company_name paymentCompanyName,
+        if(xpd.id is not null, false, true) isCanEditorDelete,
+        xp.supplier_id,
+        xp.payment_company_id
+        from xq_prepayments xp
+        left join xq_payment_detail xpd on xpd.prepayments_id = xp.id and xpd.iz_delete = 0
+        left join xq_supplier xs on xs.id = xp.supplier_id
+        left join xq_payment_company xpc on xpc.id = xp.payment_company_id
+        where
+        xp.iz_delete = 0
+        <if test="dto.id != null and dto.id != ''">
+            and xp.id like concat("%", #{dto.id}, "%")
+        </if>
+        <if test="dto.paymentDetailIds != null and dto.paymentDetailIds != ''">
+            and find_in_set(xp.id, #{dto.paymentDetailIds})
+        </if>
+        <if test="dto.supplierIds != null and dto.supplierIds != ''">
+            and find_in_set(xp.supplier_id, #{dto.supplierIds})
+        </if>
+        <if test="dto.paymentCompanyIds != null and dto.paymentCompanyIds != ''">
+            and find_in_set(xp.payment_company_id, #{dto.paymentCompanyIds})
+        </if>
+        <if test="dto.paymentStartDate != null and dto.paymentEndDate != null">
+            and xp.payment_date between #{dto.paymentStartDate} and DATE_ADD(#{dto.paymentEndDate},INTERVAL 1 DAY)
+        </if>
+        <if test="dto.remark != null and dto.remark != ''">
+            and xp.remark like concat("%", #{dto.remark}, "%")
+        </if>
+        group by xp.id
+        <if test="dto.isShow0 == 1 or (dto.paymentDetailIds != null and dto.paymentDetailIds != '')">
+            having remainderAmount &gt; 0
+        </if>
+        order by
+        <if test="dto.column != null and dto.column != ''
+        and dto.order != null and dto.order != ''">
+            <if test="dto.column == 'paymentDate'">
+                xp.payment_date ${dto.order},
+            </if>
+        </if>
+        xp.create_time desc
+    </select>
+    <select id="prepaymentsStatistics"
+            resultType="com.interesting.modules.prepayments.dto.XqPrepaymentsStatisticsDto">
+        select
+        ifnull(sum(xp.prepayment_amount), 0) prepayment_amount,
+        ifnull(sum(pay_money), 0) paidAmount,
+        ifnull(sum(xp.prepayment_amount) - ifnull(sum(pay_money), 0), 0) remainderAmount,
+        xp.currency
+        from xq_prepayments xp
+        left join xq_payment_detail xpd on xpd.prepayments_id = xp.id and xpd.iz_delete = 0
+        left join xq_supplier xs on xs.id = xp.supplier_id
+        left join xq_payment_company xpc on xpc.id = xp.payment_company_id
+        where
+        xp.iz_delete = 0
+        <if test="dto.id != null and dto.id != ''">
+            and xp.id like concat("%", #{dto.id}, "%")
+        </if>
+        <if test="dto.paymentDetailIds != null and dto.paymentDetailIds != ''">
+            and find_in_set(xp.id, #{dto.paymentDetailIds})
+        </if>
+        <if test="dto.supplierIds != null and dto.supplierIds != ''">
+            and find_in_set(xp.supplier_id, #{dto.supplierIds})
+        </if>
+        <if test="dto.paymentCompanyIds != null and dto.paymentCompanyIds != ''">
+            and find_in_set(xp.payment_company_id, #{dto.paymentCompanyIds})
+        </if>
+        <if test="dto.paymentStartDate != null and dto.paymentEndDate != null">
+            and xp.payment_date between #{dto.paymentStartDate} and DATE_ADD(#{dto.paymentEndDate},INTERVAL 1 DAY)
+        </if>
+        <if test="dto.remark != null and dto.remark != ''">
+            and xp.remark like concat("%", #{dto.remark}, "%")
+        </if>
+        group by xp.currency
+    </select>
+</mapper>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.interesting.modules.accmaterial.mapper.XqInventoryMapper">
+    <delete id="physicalDeleteBatch">
+        DELETE FROM xq_inventory
+        WHERE source_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="listInventoryDetails"
+            resultType="com.interesting.modules.accmaterial.vo.AccInventoryDetails2VO">
+        SELECT ivt.id,
+               ivt.source_type,
+               ivt.source_id,
+               ivt.direction,
+               ivt.num,
+               ivt.item_id AS accessoryId,
+               ivt.warehouse_id,
+               ivt.relative_time,
+               acc.accessory_name,
+               wh.name AS warehouseName,
+               ftp.item_text AS sourceTypeTxt,
+               acc.category_id,
+               cat.name AS categoryName,
+               COALESCE(ord.order_num, ic.rep_num, xapi.purchase_contract_no) AS orderNum,
+        ivt.unit_price AS unit_price,
+               ivt.source_rep_num AS orderNum2,
+        ivt.currency AS currency
+
+        FROM xq_inventory ivt
+         LEFT JOIN xq_accessory_info acc ON acc.id = ivt.item_id AND acc.iz_delete = 0
+         LEFT JOIN xq_warehouse wh ON wh.id = ivt.warehouse_id AND wh.iz_delete = 0
+        LEFT JOIN sys_dict_item ftp ON ftp.item_value = ivt.source_type AND ftp.dict_id = (SELECT id FROM sys_dict
+        WHERE dict_code = 'source_type' AND iz_delete = 0) AND ftp.iz_delete = 0
+        LEFT JOIN xq_accessory_category cat ON cat.id = acc.category_id AND cat.iz_delete = 0
+        LEFT JOIN xq_accessories_purchase ap ON ap.id = ivt.source_id AND ivt.iz_delete = 0 AND ivt.source_type= 'flcg'
+        LEFT JOIN xq_order ord ON ord.id = ap.order_id AND ord.iz_delete = 0
+        LEFT JOIN xq_accessory_purchase_inventory_detail xapid ON xapid.id = ivt.source_id AND xapid.iz_delete = 0
+        AND ivt.source_type= 'flcg2'
+        LEFT JOIN xq_accessory_purchase_inventory xapi ON xapi.id = xapid.source_id AND xapi.iz_delete = 0
+        LEFT JOIN xq_inventory_check_detail icd ON icd.id = ivt.source_id AND ivt.source_type= 'flpd'
+        LEFT JOIN xq_inventory_check ic ON ic.id = icd.source_id AND ic.iz_delete = 0
+
+
+        WHERE ivt.iz_delete = 0
+          AND ivt.warehouse_id = #{warehouseId}
+          AND ivt.item_id = #{accessoryId}
+        <if test="relativeTimeBegin != null and relativeTimeBegin != ''">
+            AND ivt.relative_time &gt;= #{relativeTimeBegin}
+        </if>
+        <if test="relativeTimeEnd != null and relativeTimeEnd != ''">
+            AND ivt.relative_time &lt;= #{relativeTimeEnd}
+        </if>
+
+    </select>
+
+    <select id="getSkuNum" resultType="java.math.BigDecimal">
+      select sum(num) from xq_inventory where item_id= #{accessoryId} and iz_delete=0
+    </select>
+</mapper>
